@@ -1,9 +1,4 @@
 
- // Application Controller: the single entry point for every request. It applies
-// transport security, rate limits, body limits and session checks before any
-// service runs, then routes to the service layer. Every /api route needs a
-// session unless it is listed in PUBLIC_ROUTES in middleware/requireAuth.js.
-
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
@@ -16,6 +11,7 @@ import { createRateLimiter, requireHttps } from './middleware/security.js';
 import { authRoutes } from './routes/authRoutes.js';
 import { incomeRoutes } from './routes/incomeRoutes.js';
 import { expenseRoutes } from './routes/expenseRoutes.js';
+import { categoryRoutes } from './routes/categoryRoutes.js';
 
 export function createApp({ loginRateLimit = 20, apiRateLimit = 300 } = {}) {
   const app = express();
@@ -47,7 +43,7 @@ export function createApp({ loginRateLimit = 20, apiRateLimit = 300 } = {}) {
     }
   });
 
-  // In front of the login route before it exists, so it is limited from day one.
+  // Rate-limit login requests before handling authentication.
   app.use(
     '/api/auth/login',
     createRateLimiter({
@@ -60,6 +56,7 @@ export function createApp({ loginRateLimit = 20, apiRateLimit = 300 } = {}) {
   app.use('/api/auth', authRoutes());
   app.use('/api/income', incomeRoutes());
   app.use('/api/expenses', expenseRoutes());
+  app.use('/api/categories', categoryRoutes());
 
   app.use('/api', notFound);
   app.use(errorHandler);
