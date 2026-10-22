@@ -13,6 +13,7 @@ import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { requireAuthByDefault } from './middleware/requireAuth.js';
 import { createRateLimiter, requireHttps } from './middleware/security.js';
 import { authRoutes } from './routes/authRoutes.js';
+import { incomeRoutes } from './routes/incomeRoutes.js';
 
 export function createApp({ loginRateLimit = 20, apiRateLimit = 300 } = {}) {
   const app = express();
@@ -42,7 +43,7 @@ export function createApp({ loginRateLimit = 20, apiRateLimit = 300 } = {}) {
     createRateLimiter({ name: 'login', windowMinutes: 15, limit: loginRateLimit }),
   );
   app.use('/api/auth', authRoutes());
-
+ app.use('/api/income', incomeRoutes());
   app.use('/api', notFound);
   app.use(errorHandler);
 
