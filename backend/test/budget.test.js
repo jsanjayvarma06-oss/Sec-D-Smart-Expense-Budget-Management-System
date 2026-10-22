@@ -1,3 +1,4 @@
+
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import request from 'supertest';
@@ -348,6 +349,141 @@ describe('Budget Management API', () => {
     assert.equal(
       response.body.code,
       'CATEGORY_BUDGETS_EXCEED_OVERALL',
+    );
+  });
+
+  // Backlog 12: Remaining budget calculation.
+
+  test('requires authentication for remaining budget', async () => {
+    await request(app)
+      .get('/api/budgets/remaining?month=2026-10')
+      .expect(401);
+  });
+
+  test('rejects invalid month for remaining budget', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+
+    await request(app)
+      .get('/api/budgets/remaining?month=2026-13')
+      .set('Cookie', cookie)
+      .expect(400);
+  });
+
+  test('calculates overall and category remaining budgets', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+
+    const categoriesResponse = await request(app)
+      .get('/api/categories')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    const food = categoriesResponse.body.categories.find(
+      (category) => category.name === 'Food',
+    );
+    const transport = categoriesResponse.body.categories.find(
+      (category) => category.name === 'Transport',
+    );
+
+    assert.ok(food, 'Food category must exist');
+    assert.ok(transport, 'Transport category must exist');
+
+    await request(app)
+      .post('/api/budgets')
+      .set('Cookie', cookie)
+      .send({ month: '2026-10', amount: 2000 })
+      .expect(201);
+
+    await request(app)
+      .post('/api/budgets')
+      .set('Cookie', cookie)
+      .send({
+        month: '2026-10',
+        amount: 800,
+        category_id: food.id,
+      })
+      .expect(201);
+
+    await request(app)
+      .post('/api/expenses')
+      .set('Cookie', cookie)
+      .send({
+        amount: 250,
+        spent_on: '2026-10-01',
+        category_id: food.id,
+        note: 'Food expense for budget test',
+      })
+      .expect(201);
+
+    await request(app)
+      .post('/api/expenses')
+      .set('Cookie', cookie)
+      .send({
+        amount: 100,
+        spent_on: '2026-10-02',
+        category_id: transport.id,
+        note: 'Transport expense for budget test',
+      })
+      .expect(201);
+
+    const response = await request(app)
+      .get('/api/budgets/remaining?month=2026-10')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    const remainingBudgets = response.body.remainingBudgets;
+
+    assert.equal(remainingBudgets.length, 2);
+
+    const overall = remainingBudgets.find(
+      (budget) => budget.category_id === null,
+    );
+    const foodBudget = remainingBudgets.find(
+      (budget) => budget.category_id === food.id,
+    );
+
+    assert.ok(overall, 'Overall budget should be returned');
+    assert.ok(foodBudget, 'Food budget should be returned');
+
+    assert.equal(overall.budget_amount, 2000);
+    assert.equal(overall.spent_amount, 350);
+    assert.equal(overall.remaining_amount, 1650);
+    assert.equal(overall.exceeded, false);
+
+    assert.equal(foodBudget.budget_amount, 800);
+    assert.equal(foodBudget.spent_amount, 250);
+    assert.equal(foodBudget.remaining_amount, 550);
+    assert.equal(foodBudget.exceeded, false);
+  });
+
+  test('returns zero spending when no expenses exist', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+
+    await request(app)
+      .post('/api/budgets')
+      .set('Cookie', cookie)
+      .send({ month: '2026-10', amount: 1000 })
+      .expect(201);
+
+    const response = await request(app)
+      .get('/api/budgets/remaining?month=2026-10')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    assert.equal(response.body.remainingBudgets.length, 1);
+    assert.equal(
+      response.body.remainingBudgets[0].spent_amount,
+      0,
+    );
+    assert.equal(
+      response.body.remainingBudgets[0].remaining_amount,
+      1000,
+    );
+    assert.equal(
+      response.body.remainingBudgets[0].exceeded,
+      false,
     );
   });
 });

@@ -1,3 +1,4 @@
+
 import { withUser } from '../db/userScope.js';
 
 function normalizeMonth(month) {
@@ -29,11 +30,7 @@ async function validateOverallBudget(db, userId, budgetId, amount) {
     [userId, budgetId],
   );
 
-  if (Number(rows[0].category_total) > Number(amount)) {
-    return false;
-  }
-
-  return true;
+  return Number(rows[0].category_total) <= Number(amount);
 }
 
 async function validateCategoryBudget(
@@ -54,8 +51,7 @@ async function validateCategoryBudget(
     [userId, normalizeMonth(month)],
   );
 
-  // An overall budget is optional. If it exists, category budgets
-  // must not exceed it in total.
+  // Category budgets can exist without an overall budget.
   if (overallRows.length === 0) {
     return true;
   }
@@ -70,7 +66,8 @@ async function validateCategoryBudget(
     [userId, normalizeMonth(month), excludeBudgetId],
   );
 
-  const total = Number(categoryRows[0].category_total) + Number(amount);
+  const total =
+    Number(categoryRows[0].category_total) + Number(amount);
 
   return total <= Number(overallRows[0].amount);
 }
@@ -139,7 +136,10 @@ export async function createBudget(userId, budget) {
         [userId, normalizeMonth(budget.month)],
       );
 
-      if (Number(categoryRows[0].category_total) > Number(budget.amount)) {
+      if (
+        Number(categoryRows[0].category_total) >
+        Number(budget.amount)
+      ) {
         return { error: 'CATEGORY_BUDGETS_EXCEED_OVERALL' };
       }
     }
@@ -235,5 +235,67 @@ export async function deleteBudget(userId, budgetId) {
     );
 
     return rows.length > 0;
+  });
+}
+
+/**
+ * Calculate the amount spent and remaining for every budget in a month.
+ *
+ * Overall budget:
+ *   Includes all of the user's expenses in that month.
+ *
+ * Category budget:
+ *   Includes only expenses assigned to that category.
+ *
+ * Returns an empty array when the user has no budgets for that month.
+ */
+export async function getRemainingBudget(userId, month) {
+  return withUser(userId, async (db) => {
+    const { rows } = await db.query(
+      `SELECT
+         b.id AS budget_id,
+         b.month,
+         b.category_id,
+         c.name AS category_name,
+         b.amount AS budget_amount,
+         COALESCE(SUM(e.amount), 0) AS spent_amount
+       FROM budgets b
+       LEFT JOIN categories c
+         ON c.id = b.category_id
+       LEFT JOIN expenses e
+         ON e.user_id = b.user_id
+        AND e.spent_on >= b.month
+        AND e.spent_on < (b.month + INTERVAL '1 month')
+        AND (
+          b.category_id IS NULL
+          OR e.category_id = b.category_id
+        )
+       WHERE b.user_id = $1
+         AND b.month = $2::date
+       GROUP BY
+         b.id,
+         b.month,
+         b.category_id,
+         c.name,
+         b.amount
+       ORDER BY b.category_id NULLS FIRST, c.name ASC`,
+      [userId, normalizeMonth(month)],
+    );
+
+    return rows.map((row) => {
+      const budgetAmount = Number(row.budget_amount);
+      const spentAmount = Number(row.spent_amount);
+
+      return {
+        budget_id: row.budget_id,
+        month: formatBudget(row).month,
+        category_id: row.category_id,
+        category_name: row.category_name,
+        budget_amount: budgetAmount,
+        spent_amount: spentAmount,
+        remaining_amount: budgetAmount - spentAmount,
+        exceeded: spentAmount > budgetAmount,
+      };
+    });
   });
 }

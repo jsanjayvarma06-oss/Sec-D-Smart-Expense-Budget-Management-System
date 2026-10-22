@@ -1,3 +1,4 @@
+
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validate.js';
@@ -10,6 +11,7 @@ import {
   createBudget,
   updateBudget,
   deleteBudget,
+  getRemainingBudget,
 } from '../services/budgetService.js';
 import { HttpError } from '../utils/httpError.js';
 
@@ -52,6 +54,30 @@ function rejectExceededCategoryBudget(result) {
 
 export function budgetRoutes() {
   const router = Router();
+
+  // Calculate the remaining budget for each budget in a month.
+  router.get('/remaining', async (req, res, next) => {
+    try {
+      const result = monthQuerySchema.safeParse(req.query.month);
+
+      if (!result.success) {
+        throw new HttpError(
+          400,
+          'A valid month query is required (YYYY-MM)',
+          { code: 'VALIDATION' },
+        );
+      }
+
+      const remainingBudgets = await getRemainingBudget(
+        req.user.id,
+        result.data,
+      );
+
+      res.json({ remainingBudgets });
+    } catch (err) {
+      next(err);
+    }
+  });
 
   // List budgets for a month.
   router.get('/', async (req, res, next) => {
