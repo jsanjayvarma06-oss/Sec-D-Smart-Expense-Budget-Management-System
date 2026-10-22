@@ -39,18 +39,20 @@ function dateOnly(value) {
 }
 
 describe('Expense CRUD API', () => {
-  test('creates an expense with amount, date and note', async () => {
+  test('creates an expense with amount, date, note and merchant', async () => {
     const user = await createUser();
     const cookie = await loginAs(user);
     const category = await createCategory(user.id);
 
-    const response = await createValidExpense(cookie, category.id)
-      .expect(201);
+    const response = await createValidExpense(cookie, category.id, {
+      merchant: 'Swiggy',
+    }).expect(201);
 
     assert.equal(Number(response.body.expense.amount), 250);
     assert.equal(response.body.expense.category_id, category.id);
     assert.equal(dateOnly(response.body.expense.spent_on), '2026-10-01');
     assert.equal(response.body.expense.note, 'Lunch');
+    assert.equal(response.body.expense.merchant, 'Swiggy');
   });
 
   test('lists only the logged-in user expenses', async () => {
@@ -61,10 +63,13 @@ describe('Expense CRUD API', () => {
     const category1 = await createCategory(user1.id, 'Food');
     const category2 = await createCategory(user2.id, 'Travel');
 
-    await createValidExpense(cookie1, category1.id);
+    await createValidExpense(cookie1, category1.id, {
+      merchant: 'Swiggy',
+    });
     await createValidExpense(cookie2, category2.id, {
       amount: 500,
       note: 'Bus ticket',
+      merchant: 'KSRTC',
     });
 
     const response = await request(app)
@@ -74,14 +79,17 @@ describe('Expense CRUD API', () => {
 
     assert.equal(response.body.expenses.length, 1);
     assert.equal(Number(response.body.expenses[0].amount), 250);
+    assert.equal(response.body.expenses[0].merchant, 'Swiggy');
   });
 
-  test('updates an expense record', async () => {
+  test('updates an expense record including merchant', async () => {
     const user = await createUser();
     const cookie = await loginAs(user);
     const category = await createCategory(user.id);
-    const created = await createValidExpense(cookie, category.id)
-      .expect(201);
+
+    const created = await createValidExpense(cookie, category.id, {
+      merchant: 'Swiggy',
+    }).expect(201);
 
     const response = await request(app)
       .put(`/api/expenses/${created.body.expense.id}`)
@@ -91,12 +99,14 @@ describe('Expense CRUD API', () => {
         category_id: category.id,
         spent_on: '2026-10-02',
         note: 'Updated note',
+        merchant: 'Amazon',
       })
       .expect(200);
 
     assert.equal(Number(response.body.expense.amount), 400);
     assert.equal(dateOnly(response.body.expense.spent_on), '2026-10-02');
     assert.equal(response.body.expense.note, 'Updated note');
+    assert.equal(response.body.expense.merchant, 'Amazon');
   });
 
   test('deletes an expense record', async () => {

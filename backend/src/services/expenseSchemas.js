@@ -33,11 +33,19 @@ const noteSchema = z.string()
   .optional()
   .transform((value) => value || null);
 
+const merchantSchema = z.string()
+  .trim()
+  .max(100, 'Merchant name must not exceed 100 characters')
+  .nullable()
+  .optional()
+  .transform((value) => value || null);
+
 export const createExpenseSchema = z.object({
   amount: amountSchema,
   category_id: z.string().uuid('Enter a valid category ID'),
   spent_on: dateSchema,
   note: noteSchema,
+  merchant: merchantSchema,
 });
 
 export const updateExpenseSchema = createExpenseSchema;
