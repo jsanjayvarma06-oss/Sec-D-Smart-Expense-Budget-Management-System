@@ -30,8 +30,9 @@ separate category rather than folded into the non-functional list.
 | `02_UseCase_Diagram.pdf` | UML use case diagram with all actors, use cases and stereotype relationships |
 | `usecase_diagram.png` | Image version of the same diagram, for embedding in reports or slides |
 | `smart_expense_usecase.drawio` | Editable draw.io source for the diagram |
-| `03_UseCase_Flow.docx` / `.pdf` | One-page flow specification for UC-03 Manage Expense Records |
+| `03_UseCase_Flows.pdf` | Flow specifications for all ten use cases, UC-01 to UC-10, each with goal, actors, main flow and alternate flows |
 | `04_Test_Plan.docx` / `.pdf` | 50 test cases across unit, integration and system testing |
+| `06_Backup_and_Recovery_Strategy.md` | Backup frequency and retention, recovery procedures and forced-shutdown test results (NFR10) |
 
 ---
 

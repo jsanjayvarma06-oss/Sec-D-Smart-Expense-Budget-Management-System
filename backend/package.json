@@ -9,7 +9,10 @@
     "start": "node src/server.js",
     "migrate": "node --env-file-if-exists=.env src/db/migrate.js",
     "lint": "eslint .",
-    "test": "node --env-file-if-exists=.env.test --test --test-concurrency=1 \"test/**/*.test.js\""
+    "test": "node --env-file-if-exists=.env.test --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "db:backup": "node --env-file-if-exists=.env scripts/backup.js",
+    "db:restore": "node --env-file-if-exists=.env scripts/restore.js",
+    "db:crash-drill": "node --env-file-if-exists=.env scripts/forcedShutdownDrill.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",

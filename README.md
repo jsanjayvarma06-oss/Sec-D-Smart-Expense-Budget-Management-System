@@ -29,6 +29,7 @@ backend/            Express API
   src/routes/       HTTP handlers, one file per area
   src/services/     Business logic; the only place SQL runs
   src/middleware/   Auth check, validation, rate limiting, error handling
+  scripts/          Backup, restore and forced-shutdown drill
   test/             API tests (node:test + Supertest)
 frontend/           React app (placeholder page for now)
 database/
@@ -73,6 +74,9 @@ Optional settings and their defaults are in `backend/src/config.js`.
 | `npm run dev:backend` | API with auto-reload |
 | `npm run dev:frontend` | Vite dev server, proxies `/api` to the backend |
 | `npm run migrate` | Apply new database migrations |
+| `npm run db:backup` | Back up the database to `backups/` |
+| `npm run db:restore -w backend -- <file> --yes` | Restore a backup, replacing current data |
+| `npm run db:crash-drill -w backend -- --yes` | Forced-shutdown test for NFR10 (stops PostgreSQL; local or staging only) |
 | `npm test` | Backend tests against the `_test` database |
 | `npm run lint` | ESLint for both apps |
 | `npm run build` | Production build of the frontend |
@@ -106,6 +110,12 @@ be agreed by the team and can be changed through environment variables.
 
 Sessions are stored server-side instead of using stateless JWTs because SR03
 requires a token to stop working immediately after logout.
+
+## Backup and recovery
+
+Backup frequency, retention, recovery procedures and the forced-shutdown test
+results for NFR10 are in
+[`Documents/06_Backup_and_Recovery_Strategy.md`](Documents/06_Backup_and_Recovery_Strategy.md).
 
 ## Contributing
 
