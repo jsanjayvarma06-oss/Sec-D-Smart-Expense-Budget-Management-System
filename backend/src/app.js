@@ -1,4 +1,5 @@
-// Application Controller: the single entry point for every request. It applies
+
+ // Application Controller: the single entry point for every request. It applies
 // transport security, rate limits, body limits and session checks before any
 // service runs, then routes to the service layer. Every /api route needs a
 // session unless it is listed in PUBLIC_ROUTES in middleware/requireAuth.js.
@@ -14,6 +15,7 @@ import { requireAuthByDefault } from './middleware/requireAuth.js';
 import { createRateLimiter, requireHttps } from './middleware/security.js';
 import { authRoutes } from './routes/authRoutes.js';
 import { incomeRoutes } from './routes/incomeRoutes.js';
+import { expenseRoutes } from './routes/expenseRoutes.js';
 
 export function createApp({ loginRateLimit = 20, apiRateLimit = 300 } = {}) {
   const app = express();
@@ -25,7 +27,15 @@ export function createApp({ loginRateLimit = 20, apiRateLimit = 300 } = {}) {
   app.use(express.json({ limit: '10kb' }));
   app.use(cookieParser());
 
-  app.use('/api', createRateLimiter({ name: 'api', windowMinutes: 15, limit: apiRateLimit }));
+  app.use(
+    '/api',
+    createRateLimiter({
+      name: 'api',
+      windowMinutes: 15,
+      limit: apiRateLimit,
+    }),
+  );
+
   app.use('/api', requireAuthByDefault);
 
   app.get('/api/health', async (_req, res, next) => {
@@ -40,10 +50,17 @@ export function createApp({ loginRateLimit = 20, apiRateLimit = 300 } = {}) {
   // In front of the login route before it exists, so it is limited from day one.
   app.use(
     '/api/auth/login',
-    createRateLimiter({ name: 'login', windowMinutes: 15, limit: loginRateLimit }),
+    createRateLimiter({
+      name: 'login',
+      windowMinutes: 15,
+      limit: loginRateLimit,
+    }),
   );
+
   app.use('/api/auth', authRoutes());
- app.use('/api/income', incomeRoutes());
+  app.use('/api/income', incomeRoutes());
+  app.use('/api/expenses', expenseRoutes());
+
   app.use('/api', notFound);
   app.use(errorHandler);
 
