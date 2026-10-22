@@ -14,7 +14,17 @@ const dateSchema = z.string()
 
     return !Number.isNaN(date.getTime())
       && date.toISOString().slice(0, 10) === value;
-  }, 'Enter a valid date');
+  }, 'Enter a valid date')
+  .refine((value) => {
+    const today = new Date();
+    const todayString = [
+      today.getFullYear(),
+      String(today.getMonth() + 1).padStart(2, '0'),
+      String(today.getDate()).padStart(2, '0'),
+    ].join('-');
+
+    return value <= todayString;
+  }, 'Expense date cannot be in the future');
 
 const noteSchema = z.string()
   .trim()

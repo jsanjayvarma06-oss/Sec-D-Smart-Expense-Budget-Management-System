@@ -131,6 +131,25 @@ describe('Expense CRUD API', () => {
       .expect(400);
   });
 
+  test('rejects future expense dates', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+    const category = await createCategory(user.id);
+
+    const future = new Date();
+    future.setDate(future.getDate() + 1);
+
+    const futureDate = [
+      future.getFullYear(),
+      String(future.getMonth() + 1).padStart(2, '0'),
+      String(future.getDate()).padStart(2, '0'),
+    ].join('-');
+
+    await createValidExpense(cookie, category.id, {
+      spent_on: futureDate,
+    }).expect(400);
+  });
+
   test('rejects a category belonging to another user', async () => {
     const user1 = await createUser('user1@test.com');
     const user2 = await createUser('user2@test.com');
