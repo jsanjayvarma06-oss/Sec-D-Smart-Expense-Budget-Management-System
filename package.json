@@ -1,0 +1,20 @@
+{
+  "name": "smart-expense-budget",
+  "private": true,
+  "description": "Smart Expense & Budget Management System (Sec-D)",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace backend",
+    "dev:frontend": "npm run dev --workspace frontend",
+    "migrate": "npm run migrate --workspace backend",
+    "lint": "npm run lint --workspaces",
+    "test": "npm test --workspace backend",
+    "build": "npm run build --workspace frontend"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
