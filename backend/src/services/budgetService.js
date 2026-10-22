@@ -1,4 +1,3 @@
-
 import { withUser } from '../db/userScope.js';
 
 function normalizeMonth(month) {
@@ -14,6 +13,66 @@ function formatBudget(row) {
       ? row.month.toISOString().slice(0, 7)
       : String(row.month).slice(0, 7),
   };
+}
+
+async function validateOverallBudget(db, userId, budgetId, amount) {
+  const { rows } = await db.query(
+    `SELECT COALESCE(SUM(amount), 0) AS category_total
+     FROM budgets
+     WHERE user_id = $1
+       AND category_id IS NOT NULL
+       AND month = (
+         SELECT month
+         FROM budgets
+         WHERE id = $2 AND user_id = $1
+       )`,
+    [userId, budgetId],
+  );
+
+  if (Number(rows[0].category_total) > Number(amount)) {
+    return false;
+  }
+
+  return true;
+}
+
+async function validateCategoryBudget(
+  db,
+  userId,
+  month,
+  categoryId,
+  amount,
+  excludeBudgetId = null,
+) {
+  const { rows: overallRows } = await db.query(
+    `SELECT amount
+     FROM budgets
+     WHERE user_id = $1
+       AND month = $2::date
+       AND category_id IS NULL
+     FOR UPDATE`,
+    [userId, normalizeMonth(month)],
+  );
+
+  // An overall budget is optional. If it exists, category budgets
+  // must not exceed it in total.
+  if (overallRows.length === 0) {
+    return true;
+  }
+
+  const { rows: categoryRows } = await db.query(
+    `SELECT COALESCE(SUM(amount), 0) AS category_total
+     FROM budgets
+     WHERE user_id = $1
+       AND month = $2::date
+       AND category_id IS NOT NULL
+       AND ($3::uuid IS NULL OR id <> $3::uuid)`,
+    [userId, normalizeMonth(month), excludeBudgetId],
+  );
+
+  const total = Number(categoryRows[0].category_total) + Number(amount);
+
+  return total <= Number(overallRows[0].amount);
 }
 
 export async function listBudgets(userId, month) {
@@ -48,6 +107,41 @@ export async function createBudget(userId, budget) {
       if (categories.length === 0) {
         return { error: 'INVALID_CATEGORY' };
       }
+
+      const { rows: existingRows } = await db.query(
+        `SELECT id
+         FROM budgets
+         WHERE user_id = $1
+           AND month = $2::date
+           AND category_id = $3`,
+        [userId, normalizeMonth(budget.month), budget.category_id],
+      );
+
+      const valid = await validateCategoryBudget(
+        db,
+        userId,
+        budget.month,
+        budget.category_id,
+        budget.amount,
+        existingRows[0]?.id ?? null,
+      );
+
+      if (!valid) {
+        return { error: 'CATEGORY_BUDGETS_EXCEED_OVERALL' };
+      }
+    } else {
+      const { rows: categoryRows } = await db.query(
+        `SELECT COALESCE(SUM(amount), 0) AS category_total
+         FROM budgets
+         WHERE user_id = $1
+           AND month = $2::date
+           AND category_id IS NOT NULL`,
+        [userId, normalizeMonth(budget.month)],
+      );
+
+      if (Number(categoryRows[0].category_total) > Number(budget.amount)) {
+        return { error: 'CATEGORY_BUDGETS_EXCEED_OVERALL' };
+      }
     }
 
     const { rows } = await db.query(
@@ -73,6 +167,50 @@ export async function createBudget(userId, budget) {
 
 export async function updateBudget(userId, budgetId, amount) {
   return withUser(userId, async (db) => {
+    const { rows: currentRows } = await db.query(
+      `SELECT id, month, category_id
+       FROM budgets
+       WHERE id = $1 AND user_id = $2
+       FOR UPDATE`,
+      [budgetId, userId],
+    );
+
+    const current = currentRows[0];
+
+    if (!current) {
+      return null;
+    }
+
+    if (current.category_id === null) {
+      const valid = await validateOverallBudget(
+        db,
+        userId,
+        budgetId,
+        amount,
+      );
+
+      if (!valid) {
+        return { error: 'CATEGORY_BUDGETS_EXCEED_OVERALL' };
+      }
+    } else {
+      const month = current.month instanceof Date
+        ? current.month.toISOString().slice(0, 7)
+        : String(current.month).slice(0, 7);
+
+      const valid = await validateCategoryBudget(
+        db,
+        userId,
+        month,
+        current.category_id,
+        amount,
+        budgetId,
+      );
+
+      if (!valid) {
+        return { error: 'CATEGORY_BUDGETS_EXCEED_OVERALL' };
+      }
+    }
+
     const { rows } = await db.query(
       `UPDATE budgets
        SET amount = $1,

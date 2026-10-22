@@ -1,4 +1,3 @@
-
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validate.js';
@@ -35,17 +34,36 @@ const monthQuerySchema = z.string()
     return year >= 1900 && month >= 1 && month <= 12;
   }, 'Enter a valid month');
 
+function rejectExceededCategoryBudget(result) {
+  if (result?.error === 'CATEGORY_BUDGETS_EXCEED_OVERALL') {
+    throw new HttpError(
+      400,
+      'The combined category budgets cannot exceed the overall monthly budget',
+      {
+        code: 'CATEGORY_BUDGETS_EXCEED_OVERALL',
+        fields: {
+          overallAmount: result.overallAmount,
+          proposedTotal: result.proposedTotal,
+        },
+      },
+    );
+  }
+}
+
 export function budgetRoutes() {
   const router = Router();
 
+  // List budgets for a month.
   router.get('/', async (req, res, next) => {
     try {
       const result = monthQuerySchema.safeParse(req.query.month);
 
       if (!result.success) {
-        throw new HttpError(400, 'A valid month query is required (YYYY-MM)', {
-          code: 'VALIDATION',
-        });
+        throw new HttpError(
+          400,
+          'A valid month query is required (YYYY-MM)',
+          { code: 'VALIDATION' },
+        );
       }
 
       const budgets = await listBudgets(req.user.id, result.data);
@@ -55,9 +73,12 @@ export function budgetRoutes() {
     }
   });
 
+  // Create or replace a monthly budget.
   router.post('/', validate(createBudgetSchema), async (req, res, next) => {
     try {
       const result = await createBudget(req.user.id, req.body);
+
+      rejectExceededCategoryBudget(result);
 
       if (result.error === 'INVALID_CATEGORY') {
         throw new HttpError(400, 'Invalid or inaccessible category', {
@@ -71,14 +92,18 @@ export function budgetRoutes() {
     }
   });
 
+  // Update an existing budget.
   router.put('/:id', validate(updateBudgetSchema), async (req, res, next) => {
     try {
       const budgetId = validateBudgetId(req.params.id);
+
       const budget = await updateBudget(
         req.user.id,
         budgetId,
         req.body.amount,
       );
+
+      rejectExceededCategoryBudget(budget);
 
       if (!budget) {
         throw new HttpError(404, 'Budget not found');
@@ -90,6 +115,7 @@ export function budgetRoutes() {
     }
   });
 
+  // Delete an existing budget.
   router.delete('/:id', async (req, res, next) => {
     try {
       const budgetId = validateBudgetId(req.params.id);

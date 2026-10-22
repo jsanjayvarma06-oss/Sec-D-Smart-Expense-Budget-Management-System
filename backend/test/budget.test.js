@@ -1,4 +1,3 @@
-
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import request from 'supertest';
@@ -167,5 +166,188 @@ describe('Budget Management API', () => {
       .expect(200);
 
     assert.equal(listed.body.budgets.length, 0);
+  });
+
+  test('allows category budgets within the overall monthly budget', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+
+    const categories = await request(app)
+      .get('/api/categories')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    const food = categories.body.categories.find(
+      (category) => category.name === 'Food',
+    );
+    const transport = categories.body.categories.find(
+      (category) => category.name === 'Transport',
+    );
+
+    assert.ok(food, 'Food category must exist');
+    assert.ok(transport, 'Transport category must exist');
+
+    await request(app)
+      .post('/api/budgets')
+      .set('Cookie', cookie)
+      .send({ month: '2026-10', amount: 2000 })
+      .expect(201);
+
+    await request(app)
+      .post('/api/budgets')
+      .set('Cookie', cookie)
+      .send({
+        month: '2026-10',
+        amount: 800,
+        category_id: food.id,
+      })
+      .expect(201);
+
+    await request(app)
+      .post('/api/budgets')
+      .set('Cookie', cookie)
+      .send({
+        month: '2026-10',
+        amount: 700,
+        category_id: transport.id,
+      })
+      .expect(201);
+  });
+
+  test('rejects category budgets exceeding the overall monthly budget', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+
+    const categories = await request(app)
+      .get('/api/categories')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    const food = categories.body.categories.find(
+      (category) => category.name === 'Food',
+    );
+
+    assert.ok(food, 'Food category must exist');
+
+    await request(app)
+      .post('/api/budgets')
+      .set('Cookie', cookie)
+      .send({ month: '2026-10', amount: 1000 })
+      .expect(201);
+
+    const response = await request(app)
+      .post('/api/budgets')
+      .set('Cookie', cookie)
+      .send({
+        month: '2026-10',
+        amount: 1200,
+        category_id: food.id,
+      })
+      .expect(400);
+
+    assert.equal(
+      response.body.code,
+      'CATEGORY_BUDGETS_EXCEED_OVERALL',
+    );
+  });
+
+  test('rejects category budget updates that exceed the overall budget', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+
+    const categories = await request(app)
+      .get('/api/categories')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    const food = categories.body.categories.find(
+      (category) => category.name === 'Food',
+    );
+    const transport = categories.body.categories.find(
+      (category) => category.name === 'Transport',
+    );
+
+    assert.ok(food, 'Food category must exist');
+    assert.ok(transport, 'Transport category must exist');
+
+    await request(app)
+      .post('/api/budgets')
+      .set('Cookie', cookie)
+      .send({ month: '2026-10', amount: 1000 })
+      .expect(201);
+
+    const foodBudget = await request(app)
+      .post('/api/budgets')
+      .set('Cookie', cookie)
+      .send({
+        month: '2026-10',
+        amount: 400,
+        category_id: food.id,
+      })
+      .expect(201);
+
+    await request(app)
+      .post('/api/budgets')
+      .set('Cookie', cookie)
+      .send({
+        month: '2026-10',
+        amount: 300,
+        category_id: transport.id,
+      })
+      .expect(201);
+
+    const response = await request(app)
+      .put(`/api/budgets/${foodBudget.body.budget.id}`)
+      .set('Cookie', cookie)
+      .send({ amount: 800 })
+      .expect(400);
+
+    assert.equal(
+      response.body.code,
+      'CATEGORY_BUDGETS_EXCEED_OVERALL',
+    );
+  });
+
+  test('rejects reducing the overall budget below the category budget total', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+
+    const categories = await request(app)
+      .get('/api/categories')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    const food = categories.body.categories.find(
+      (category) => category.name === 'Food',
+    );
+
+    assert.ok(food, 'Food category must exist');
+
+    const overall = await request(app)
+      .post('/api/budgets')
+      .set('Cookie', cookie)
+      .send({ month: '2026-10', amount: 2000 })
+      .expect(201);
+
+    await request(app)
+      .post('/api/budgets')
+      .set('Cookie', cookie)
+      .send({
+        month: '2026-10',
+        amount: 1200,
+        category_id: food.id,
+      })
+      .expect(201);
+
+    const response = await request(app)
+      .put(`/api/budgets/${overall.body.budget.id}`)
+      .set('Cookie', cookie)
+      .send({ amount: 1000 })
+      .expect(400);
+
+    assert.equal(
+      response.body.code,
+      'CATEGORY_BUDGETS_EXCEED_OVERALL',
+    );
   });
 });
