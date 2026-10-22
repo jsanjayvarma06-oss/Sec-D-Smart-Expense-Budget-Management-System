@@ -1,4 +1,3 @@
-
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validate.js';
@@ -13,6 +12,7 @@ import {
   deleteBudget,
   getRemainingBudget,
 } from '../services/budgetService.js';
+import { getBudgetAlerts } from '../services/budgetAlertService.js';
 import { HttpError } from '../utils/httpError.js';
 
 const budgetIdSchema = z.string().uuid();
@@ -55,6 +55,27 @@ function rejectExceededCategoryBudget(result) {
 export function budgetRoutes() {
   const router = Router();
 
+  // Return alerts when spending reaches 80% or 100% of a budget.
+  router.get('/alerts', async (req, res, next) => {
+    try {
+      const result = monthQuerySchema.safeParse(req.query.month);
+
+      if (!result.success) {
+        throw new HttpError(
+          400,
+          'A valid month query is required (YYYY-MM)',
+          { code: 'VALIDATION' },
+        );
+      }
+
+      const alerts = await getBudgetAlerts(req.user.id, result.data);
+
+      res.json({ alerts });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // Calculate the remaining budget for each budget in a month.
   router.get('/remaining', async (req, res, next) => {
     try {
@@ -93,6 +114,7 @@ export function budgetRoutes() {
       }
 
       const budgets = await listBudgets(req.user.id, result.data);
+
       res.json({ budgets });
     } catch (err) {
       next(err);
