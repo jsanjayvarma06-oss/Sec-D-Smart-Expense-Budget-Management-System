@@ -1,3 +1,4 @@
+
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validate.js';
@@ -5,6 +6,7 @@ import {
   createBudgetSchema,
   updateBudgetSchema,
 } from '../services/budgetSchemas.js';
+import { recommendBudgets } from '../services/budgetRecommendationService.js';
 import {
   listBudgets,
   createBudget,
@@ -13,6 +15,9 @@ import {
   getRemainingBudget,
 } from '../services/budgetService.js';
 import { getBudgetAlerts } from '../services/budgetAlertService.js';
+import {
+  createBudgetNotifications,
+} from '../services/notificationService.js';
 import { HttpError } from '../utils/httpError.js';
 
 const budgetIdSchema = z.string().uuid();
@@ -54,8 +59,17 @@ function rejectExceededCategoryBudget(result) {
 
 export function budgetRoutes() {
   const router = Router();
+  // Recommend category budgets based on spending history and income.
+  router.get('/recommendations', async (req, res, next) => {
+    try {
+      const recommendations = await recommendBudgets(req.user.id);
+      res.json({ recommendations });
+    } catch (err) {
+      next(err);
+    }
+  });
 
-  // Return alerts when spending reaches 80% or 100% of a budget.
+  // Return budget alerts and save each alert as a notification.
   router.get('/alerts', async (req, res, next) => {
     try {
       const result = monthQuerySchema.safeParse(req.query.month);
@@ -69,6 +83,8 @@ export function budgetRoutes() {
       }
 
       const alerts = await getBudgetAlerts(req.user.id, result.data);
+
+      await createBudgetNotifications(req.user.id, alerts);
 
       res.json({ alerts });
     } catch (err) {
