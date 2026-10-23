@@ -18,7 +18,7 @@ import { expenseRoutes } from './routes/expenseRoutes.js';
 import { categoryRoutes } from './routes/categoryRoutes.js';
 import { notificationRoutes } from './routes/notificationRoutes.js';
 import { budgetRoutes } from './routes/budgetRoutes.js';
-
+import { analyticsRoutes } from './routes/analyticsRoutes.js';
 export function createApp({
   loginRateLimit = 20,
   apiRateLimit = 300,
@@ -75,6 +75,7 @@ export function createApp({
   app.use('/api/expenses', expenseRoutes());
   app.use('/api/categories', categoryRoutes());
   app.use('/api/budgets', budgetRoutes());
+  app.use('/api/analytics', analyticsRoutes());
   app.use('/api/notifications', notificationRoutes());
 
   // Error handling
