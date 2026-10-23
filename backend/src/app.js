@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import { config } from './config.js';
 import { query } from './db/pool.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
+import { financialHealthRoutes } from './routes/financialHealthRoutes.js';
 import { whatIfRoutes } from './routes/whatIfRoutes.js';
 import { requireAuthByDefault } from './middleware/requireAuth.js';
 import {
@@ -70,9 +71,10 @@ export function createApp({
     }),
   );
 
-  // API routes
-  app.use('/api/auth', authRoutes());
-  app.use('/api/income', incomeRoutes());
+ // API routes
+app.use('/api/financial-health', financialHealthRoutes());
+app.use('/api/auth', authRoutes());
+app.use('/api/income', incomeRoutes());
   app.use('/api/expenses', expenseRoutes());
   app.use('/api/categories', categoryRoutes());
   app.use('/api/budgets', budgetRoutes());
