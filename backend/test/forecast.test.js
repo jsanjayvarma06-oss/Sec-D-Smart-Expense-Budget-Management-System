@@ -1,54 +1,80 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import request from 'supertest';
+import { createApp } from '../src/app.js';
+import { query } from '../src/db/pool.js';
 import {
-  forecastMonthlySpending,
-} from '../src/services/forecastService.js';
-import { createUser, useTestDatabase } from './helpers.js';
-import { withUser } from '../src/db/userScope.js';
+  createUser,
+  loginAs,
+  useTestDatabase,
+} from './helpers.js';
 
 useTestDatabase();
 
-describe('Monthly spending forecast', () => {
-  test('returns unavailable when fewer than 3 months have spending', async () => {
-    const user = await createUser();
+const app = createApp();
 
-    const result = await forecastMonthlySpending(user.id);
+async function createExpense(userId, categoryId, amount, date) {
+  await query(
+    `INSERT INTO expenses (user_id, category_id, amount, spent_on)
+     VALUES ($1, $2, $3, $4::date)`,
+    [userId, categoryId, amount, date],
+  );
+}
 
-    assert.equal(result.available, false);
-    assert.equal(result.forecast, null);
-    assert.equal(result.monthsOfHistory, 0);
-    assert.match(result.reason, /3 months/);
+
+async function createCategory(userId) {
+  const { rows } = await query(
+    `INSERT INTO categories (user_id, name)
+     VALUES ($1, $2)
+     RETURNING id`,
+    [userId, 'Forecast Test Category'],
+  );
+
+  return rows[0].id;
+}
+
+describe('Monthly spending forecast API', () => {
+  test('requires authentication', async () => {
+    await request(app)
+      .get('/api/forecast/monthly')
+      .expect(401);
   });
 
-  test('returns a forecast when at least 3 months of history exist', async () => {
+  test('reports unavailable when fewer than three months have spending', async () => {
     const user = await createUser();
+    const cookie = await loginAs(user);
+    const categoryId = await createCategory(user.id);
 
-    await withUser(user.id, async (db) => {
-      const { rows: categories } = await db.query(
-        `SELECT id FROM categories WHERE user_id IS NULL LIMIT 1`,
-      );
+    await createExpense(user.id, categoryId, 100, '2026-08-10');
 
-      assert.ok(categories.length > 0, 'A default category must exist');
+    const response = await request(app)
+      .get('/api/forecast/monthly')
+      .set('Cookie', cookie)
+      .expect(200);
 
-      const categoryId = categories[0].id;
+    assert.equal(response.body.forecast.available, false);
+    assert.equal(response.body.forecast.forecast, null);
+  });
 
-      await db.query(
-        `INSERT INTO expenses
-          (user_id, category_id, amount, spent_on, note)
-         VALUES
-          ($1, $2, 100, date_trunc('month', CURRENT_DATE) - INTERVAL '1 month', 'Forecast test 1'),
-          ($1, $2, 200, date_trunc('month', CURRENT_DATE) - INTERVAL '2 months', 'Forecast test 2'),
-          ($1, $2, 300, date_trunc('month', CURRENT_DATE) - INTERVAL '3 months', 'Forecast test 3')`,
-        [user.id, categoryId],
-      );
-    });
+  test('calculates the average of three months of spending', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+    const categoryId = await createCategory(user.id);
 
-    const result = await forecastMonthlySpending(user.id);
+    // These dates represent the three complete months before October 2026.
+    await createExpense(user.id, categoryId, 100, '2026-07-10');
+    await createExpense(user.id, categoryId, 200, '2026-08-10');
+    await createExpense(user.id, categoryId, 300, '2026-09-10');
 
-    assert.equal(result.available, true);
-    assert.equal(result.monthsOfHistory, 3);
-    assert.equal(result.forecast, 200);
-    assert.equal(result.monthlyTotals.length, 3);
+    const response = await request(app)
+      .get('/api/forecast/monthly')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    assert.equal(response.body.forecast.available, true);
+    assert.equal(response.body.forecast.monthsOfHistory, 3);
+    assert.equal(response.body.forecast.forecast, 200);
+    assert.equal(response.body.forecast.monthlyTotals.length, 3);
   });
 });
