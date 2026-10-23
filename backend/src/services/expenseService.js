@@ -1,3 +1,4 @@
+﻿import { detectUnusualSpending } from './anomalyDetectionService.js';
 
 import { withUser } from '../db/userScope.js';
 import { suggestCategoryName } from './merchantCategoryService.js';
@@ -52,10 +53,16 @@ export async function createExpense(userId, expense) {
 
     if (!categoryId) return null;
 
+    const detection = await detectUnusualSpending(
+      userId,
+      expense.amount,
+      categoryId,
+    );
+
     const { rows } = await db.query(
       `INSERT INTO expenses
-        (user_id, category_id, amount, spent_on, note, merchant)
-       VALUES ($1, $2, $3, $4::date, $5, $6)
+        (user_id, category_id, amount, spent_on, note, merchant, is_flagged)
+       VALUES ($1, $2, $3, $4::date, $5, $6, $7)
        RETURNING id, category_id, amount, spent_on, note, merchant,
                  is_flagged, created_at, updated_at`,
       [
@@ -65,13 +72,16 @@ export async function createExpense(userId, expense) {
         expense.spent_on,
         expense.note ?? null,
         expense.merchant ?? null,
+        detection.isUnusual,
       ],
     );
 
-    return formatExpense(rows[0]);
+    return {
+      ...formatExpense(rows[0]),
+      anomaly: detection,
+    };
   });
 }
-
 export async function listExpenses(userId) {
   return withUser(userId, async (db) => {
     const { rows } = await db.query(
@@ -133,3 +143,6 @@ export async function deleteExpense(userId, expenseId) {
     return rows.length > 0;
   });
 }
+
+
+
