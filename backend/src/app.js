@@ -8,6 +8,7 @@ import { query } from './db/pool.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { financialHealthRoutes } from './routes/financialHealthRoutes.js';
 import { whatIfRoutes } from './routes/whatIfRoutes.js';
+import { recurringExpenseRoutes } from './routes/recurringExpenseRoutes.js';
 import { requireAuthByDefault } from './middleware/requireAuth.js';
 import {
   createRateLimiter,
@@ -15,6 +16,7 @@ import {
 } from './middleware/security.js';
 
 import { authRoutes } from './routes/authRoutes.js';
+import { forecastRoutes } from './routes/forecastRoutes.js';
 import { incomeRoutes } from './routes/incomeRoutes.js';
 import { expenseRoutes } from './routes/expenseRoutes.js';
 import { categoryRoutes } from './routes/categoryRoutes.js';
@@ -50,6 +52,8 @@ export function createApp({
 
   // Protect API routes by default
   app.use('/api', requireAuthByDefault);
+app.use('/api/recurring-expenses', recurringExpenseRoutes());
+app.use('/api/forecast', forecastRoutes());
 
   // Health check
   app.get('/api/health', async (_req, res, next) => {
@@ -81,6 +85,7 @@ app.use('/api/income', incomeRoutes());
 app.use('/api/what-if', whatIfRoutes());
   app.use('/api/analytics', analyticsRoutes());
   app.use('/api/notifications', notificationRoutes());
+
 
   // Error handling
   app.use('/api', notFound);
