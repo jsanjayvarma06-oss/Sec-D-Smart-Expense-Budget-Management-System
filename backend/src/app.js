@@ -16,6 +16,7 @@ import { authRoutes } from './routes/authRoutes.js';
 import { incomeRoutes } from './routes/incomeRoutes.js';
 import { expenseRoutes } from './routes/expenseRoutes.js';
 import { categoryRoutes } from './routes/categoryRoutes.js';
+import { notificationRoutes } from './routes/notificationRoutes.js';
 import { budgetRoutes } from './routes/budgetRoutes.js';
 
 export function createApp({
@@ -74,6 +75,7 @@ export function createApp({
   app.use('/api/expenses', expenseRoutes());
   app.use('/api/categories', categoryRoutes());
   app.use('/api/budgets', budgetRoutes());
+  app.use('/api/notifications', notificationRoutes());
 
   // Error handling
   app.use('/api', notFound);
