@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import { config } from './config.js';
 import { query } from './db/pool.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
+import { whatIfRoutes } from './routes/whatIfRoutes.js';
 import { requireAuthByDefault } from './middleware/requireAuth.js';
 import {
   createRateLimiter,
@@ -75,6 +76,7 @@ export function createApp({
   app.use('/api/expenses', expenseRoutes());
   app.use('/api/categories', categoryRoutes());
   app.use('/api/budgets', budgetRoutes());
+app.use('/api/what-if', whatIfRoutes());
   app.use('/api/analytics', analyticsRoutes());
   app.use('/api/notifications', notificationRoutes());
 
