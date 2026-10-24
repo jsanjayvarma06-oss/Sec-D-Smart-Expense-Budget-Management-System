@@ -41,5 +41,38 @@ export function recurringExpenseRoutes() {
     }
   });
 
+  // Mark a recurring expense cycle as paid.
+  router.patch('/:id/pay', async (req, res, next) => {
+    try {
+      const idSchema = z.string().uuid();
+      const parsedId = idSchema.safeParse(req.params.id);
+      const parsedDate = dateSchema.safeParse(req.body?.due_date);
+
+      if (!parsedId.success || !parsedDate.success) {
+        throw new HttpError(
+          400,
+          'A valid recurring expense ID and due_date are required',
+          { code: 'VALIDATION' },
+        );
+      }
+
+      const { markRecurringExpensePaid } =
+        await import('../services/recurringExpenseService.js');
+
+      const result = await markRecurringExpensePaid(
+        req.user.id,
+        parsedId.data,
+        parsedDate.data,
+      );
+
+      if (!result) {
+        throw new HttpError(404, 'Recurring expense cycle not found');
+      }
+
+      res.json({ recurringExpense: result });
+    } catch (err) {
+      next(err);
+    }
+  });
   return router;
 }

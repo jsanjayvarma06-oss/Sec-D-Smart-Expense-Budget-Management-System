@@ -8,6 +8,7 @@ import {
 } from './helpers.js';
 import {
   generateDueRecurringExpenses,
+  markRecurringExpensePaid,
 } from '../src/services/recurringExpenseService.js';
 
 useTestDatabase();
@@ -103,4 +104,49 @@ describe('Recurring expense generation', () => {
 
     assert.equal(rows[0].count, 3);
   });
+
+  test('marks a generated recurring expense cycle as paid', async () => {
+    const user = await createUser();
+    const recurring = await createRecurringExpense(user.id, {
+      cycle: 'weekly',
+      startDate: '2026-10-01',
+      nextDueDate: '2026-10-01',
+    });
+
+    await generateDueRecurringExpenses(user.id, '2026-10-01');
+
+    const result = await markRecurringExpensePaid(
+      user.id,
+      recurring.id,
+      '2026-10-01',
+    );
+
+    assert.ok(result);
+    assert.equal(result.last_paid_due_date, '2026-10-01');
+  });
+
+  test('does not mark a date paid when no generated expense exists for that date', async () => {
+    const user = await createUser();
+    const recurring = await createRecurringExpense(user.id, {
+      cycle: 'weekly',
+      startDate: '2026-10-01',
+      nextDueDate: '2026-10-01',
+    });
+
+    const result = await markRecurringExpensePaid(
+      user.id,
+      recurring.id,
+      '2026-10-01',
+    );
+
+    assert.equal(result, null);
+  });
+
+  test('rejects an invalid payment date', async () => {
+    await assert.rejects(
+      markRecurringExpensePaid('user-id', 'recurring-id', '2026-02-30'),
+      /valid YYYY-MM-DD date/,
+    );
+  });
+
 });

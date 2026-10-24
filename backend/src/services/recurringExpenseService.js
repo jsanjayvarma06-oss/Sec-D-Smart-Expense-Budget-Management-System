@@ -101,3 +101,40 @@ export async function generateDueRecurringExpenses(userId, today) {
     return generated;
   });
 }
+export async function markRecurringExpensePaid(userId, recurringExpenseId, dueDate) {
+  if (
+    typeof dueDate !== 'string'
+    || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)
+    || Number.isNaN(Date.parse(`${dueDate}T00:00:00Z`))
+    || new Date(`${dueDate}T00:00:00Z`).toISOString().slice(0, 10) !== dueDate
+  ) {
+    throw new TypeError('Due date must be a valid YYYY-MM-DD date');
+  }
+
+  return withUser(userId, async (db) => {
+    const { rows } = await db.query(
+      `UPDATE recurring_expenses
+       SET last_paid_due_date = $1::date,
+           updated_at = now()
+       WHERE id = $2
+         AND user_id = $3
+         AND is_active = true
+         AND next_due_date > $1::date
+         AND EXISTS (
+           SELECT 1
+           FROM expenses e
+           WHERE e.recurring_expense_id = recurring_expenses.id
+             AND e.user_id = $3
+             AND e.spent_on = $1::date
+         )
+       RETURNING id, category_id, amount, cycle,
+                 next_due_date::text AS next_due_date,
+                 last_paid_due_date::text AS last_paid_due_date,
+                 is_active`,
+      [dueDate, recurringExpenseId, userId],
+    );
+
+    return rows[0] ?? null;
+  });
+}
+

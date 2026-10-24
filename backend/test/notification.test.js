@@ -3,11 +3,37 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
-import { createUser, loginAs, useTestDatabase } from './helpers.js';
+import { query } from '../src/db/pool.js';
+import {
+  createUser,
+  loginAs,
+  useTestDatabase,
+} from './helpers.js';
+import { createBudgetNotifications } from '../src/services/notificationService.js';
+import { generateDueRecurringExpenses, markRecurringExpensePaid } from '../src/services/recurringExpenseService.js';
 
 useTestDatabase();
 
 const app = createApp();
+
+async function createRecurringExpense(userId, dueDate = '2026-10-25') {
+  const { rows: categories } = await query(
+    `INSERT INTO categories (user_id, name)
+     VALUES ($1, $2)
+     RETURNING id`,
+    [userId, `Reminder Test ${Math.random()}`],
+  );
+
+  const { rows } = await query(
+    `INSERT INTO recurring_expenses
+       (user_id, category_id, amount, cycle, start_date, next_due_date, note)
+     VALUES ($1, $2, 250, 'monthly', $3::date, $3::date, 'Test payment reminder')
+     RETURNING id`,
+    [userId, categories[0].id, dueDate],
+  );
+
+  return rows[0].id;
+}
 
 describe('Notification API', () => {
   test('requires authentication to list notifications', async () => {
@@ -17,9 +43,6 @@ describe('Notification API', () => {
   });
 
   test('creates a budget notification only once for the same threshold', async () => {
-    const { createBudgetNotifications } =
-  await import('../src/services/notificationService.js');
-
     const user = await createUser();
     const cookie = await loginAs(user);
 
@@ -50,7 +73,6 @@ describe('Notification API', () => {
 
     assert.equal(matching.length, 1);
   });
-
 
   test('lists notifications and filters unread notifications', async () => {
     const user = await createUser();
@@ -139,4 +161,83 @@ describe('Notification API', () => {
       );
     }
   });
+
+  test('creates a reminder for a payment due within three days', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+
+    await createRecurringExpense(user.id, '2026-10-25');
+
+    const response = await request(app)
+      .post('/api/notifications/payment-reminders')
+      .set('Cookie', cookie)
+      .send({ today: '2026-10-24' })
+      .expect(200);
+
+    assert.equal(response.body.created_count, 1);
+    assert.equal(response.body.notifications[0].type, 'payment_reminder');
+  });
+
+  test('does not create duplicate reminders for the same payment cycle', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+
+    await createRecurringExpense(user.id, '2026-10-25');
+
+    const first = await request(app)
+      .post('/api/notifications/payment-reminders')
+      .set('Cookie', cookie)
+      .send({ today: '2026-10-24' })
+      .expect(200);
+
+    const second = await request(app)
+      .post('/api/notifications/payment-reminders')
+      .set('Cookie', cookie)
+      .send({ today: '2026-10-24' })
+      .expect(200);
+
+    assert.equal(first.body.created_count, 1);
+    assert.equal(second.body.created_count, 0);
+  });
+
+  test('does not create reminders for a payment outside the three-day window', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+
+    await createRecurringExpense(user.id, '2026-10-30');
+
+    const response = await request(app)
+      .post('/api/notifications/payment-reminders')
+      .set('Cookie', cookie)
+      .send({ today: '2026-10-24' })
+      .expect(200);
+
+    assert.equal(response.body.created_count, 0);
+  });
+
+  test('does not create a reminder after the payment cycle is marked paid', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+    const recurringId = await createRecurringExpense(user.id, '2026-10-25');
+
+    await generateDueRecurringExpenses(user.id, '2026-10-25');
+
+    const paid = await markRecurringExpensePaid(
+      user.id,
+      recurringId,
+      '2026-10-25',
+    );
+
+    assert.ok(paid);
+    assert.equal(paid.last_paid_due_date, '2026-10-25');
+
+    const response = await request(app)
+      .post('/api/notifications/payment-reminders')
+      .set('Cookie', cookie)
+      .send({ today: '2026-10-24' })
+      .expect(200);
+
+    assert.equal(response.body.created_count, 0);
+  });
+
 });

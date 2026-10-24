@@ -85,3 +85,52 @@ export async function markNotificationRead(userId, notificationId) {
     return result.rows[0] || null;
   });
 }
+
+/**
+ * Create reminders for recurring payments due within the next 3 days.
+ * Paid cycles and duplicate reminders are excluded.
+ */
+export async function createPaymentReminders(userId, today) {
+  return withUser(userId, async (db) => {
+    const { rows } = await db.query(
+      `SELECT id, amount, cycle, next_due_date::text AS due_date
+       FROM recurring_expenses
+       WHERE user_id = $1
+         AND is_active = true
+         AND next_due_date BETWEEN $2::date AND ($2::date + 3)
+         AND (
+           last_paid_due_date IS NULL
+           OR last_paid_due_date < next_due_date
+         )
+       ORDER BY next_due_date ASC`,
+      [userId, today],
+    );
+
+    const created = [];
+
+    for (const payment of rows) {
+      const dedupeKey = `payment-reminder:${payment.id}:${payment.due_date}`;
+
+      const result = await db.query(
+        `INSERT INTO notifications
+           (user_id, type, message, dedupe_key)
+         VALUES ($1, 'payment_reminder', $2, $3)
+         ON CONFLICT (user_id, dedupe_key) DO NOTHING
+         RETURNING id, type, message, is_read, created_at`,
+        [
+          userId,
+          `Payment of ${payment.amount} is due on ${payment.due_date}.`,
+          dedupeKey,
+        ],
+      );
+
+      if (result.rows[0]) {
+        created.push(result.rows[0]);
+      }
+    }
+
+    return created;
+  });
+}
+
+
