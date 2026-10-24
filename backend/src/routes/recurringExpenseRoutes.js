@@ -1,7 +1,11 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { generateDueRecurringExpenses } from '../services/recurringExpenseService.js';
+import {
+  generateDueRecurringExpenses,
+  listRecurringExpenses,
+  createRecurringExpense,
+} from '../services/recurringExpenseService.js';
 import { HttpError } from '../utils/httpError.js';
 
 const dateSchema = z.string()
@@ -12,8 +16,54 @@ const dateSchema = z.string()
       && date.toISOString().slice(0, 10) === value;
   }, 'Enter a valid date');
 
+const createRecurringExpenseSchema = z.object({
+  category_id: z.string().uuid(),
+  amount: z.coerce.number().finite().positive().max(9999999999.99),
+  cycle: z.enum(['weekly', 'monthly']),
+  start_date: dateSchema,
+  note: z.string().trim().max(255).nullable().optional()
+    .transform((value) => value || null),
+});
+
 export function recurringExpenseRoutes() {
   const router = Router();
+
+  router.get('/', async (req, res, next) => {
+    try {
+      const recurringExpenses = await listRecurringExpenses(req.user.id);
+      res.json({ recurringExpenses });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/', async (req, res, next) => {
+    try {
+      const parsed = createRecurringExpenseSchema.safeParse(req.body);
+
+      if (!parsed.success) {
+        throw new HttpError(400, 'Invalid recurring expense details', {
+          code: 'VALIDATION',
+          details: parsed.error.flatten(),
+        });
+      }
+
+      const recurringExpense = await createRecurringExpense(
+        req.user.id,
+        parsed.data,
+      );
+
+      if (!recurringExpense) {
+        throw new HttpError(400, 'Invalid or inaccessible category', {
+          code: 'INVALID_CATEGORY',
+        });
+      }
+
+      res.status(201).json({ recurringExpense });
+    } catch (err) {
+      next(err);
+    }
+  });
 
   router.post('/generate-due', async (req, res, next) => {
     try {

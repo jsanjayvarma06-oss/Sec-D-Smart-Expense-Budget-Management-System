@@ -1,7 +1,22 @@
-
 import { useCallback, useEffect, useState } from 'react';
 
 const currentMonth = new Date().toISOString().slice(0, 7);
+
+function localToday() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+const emptyExpense = {
+  amount: '',
+  category_id: '',
+  spent_on: localToday(),
+  merchant: '',
+  note: '',
+};
 
 async function apiRequest(url, options = {}) {
   const response = await fetch(url, {
@@ -79,8 +94,8 @@ function AuthScreen({ onLogin }) {
         <h1>Smart Expense &amp; Budget</h1>
         <p className="muted">
           {mode === 'login'
-            ? 'Log in to view your finances.'
-            : 'Create an account to start managing your budget.'}
+            ? 'Log in to manage your finances.'
+            : 'Create an account to manage your budget.'}
         </p>
 
         <div className="auth-tabs">
@@ -95,6 +110,7 @@ function AuthScreen({ onLogin }) {
           >
             Log in
           </button>
+
           <button
             type="button"
             className={mode === 'register' ? 'active' : ''}
@@ -140,15 +156,26 @@ function AuthScreen({ onLogin }) {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              autoComplete={
+                mode === 'login' ? 'current-password' : 'new-password'
+              }
               minLength={8}
               maxLength={72}
               required
             />
           </label>
 
-          {error && <p className="error-message" role="alert">{error}</p>}
-          {message && <p className="success-message" role="status">{message}</p>}
+          {error && (
+            <p className="error-message" role="alert">
+              {error}
+            </p>
+          )}
+
+          {message && (
+            <p className="success-message" role="status">
+              {message}
+            </p>
+          )}
 
           <button type="submit" disabled={busy}>
             {busy
@@ -162,40 +189,107 @@ function AuthScreen({ onLogin }) {
     </main>
   );
 }
-
 function Dashboard({ user, onLogout }) {
   const [month, setMonth] = useState(currentMonth);
   const [budgets, setBudgets] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [expenseForm, setExpenseForm] = useState(emptyExpense);
+  const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [budgetAmount, setBudgetAmount] = useState('');
+  const [budgetSaving, setBudgetSaving] = useState(false);
+  const [budgetAlerts, setBudgetAlerts] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [financialHealth, setFinancialHealth] = useState(null);
+  const [recurringExpenses, setRecurringExpenses] = useState([]);
+  const [recurringForm, setRecurringForm] = useState({
+    category_id: '',
+    amount: '',
+    cycle: 'monthly',
+    start_date: localToday(),
+    note: '',
+  });
+  const [recurringSaving, setRecurringSaving] = useState(false);
+  const [categoryBudgetForm, setCategoryBudgetForm] = useState({
+    category_id: '',
+    amount: '',
+  });
+  const [categoryBudgetSaving, setCategoryBudgetSaving] = useState(false);
+
+  const refreshData = useCallback(() => {
+    setRefreshVersion((version) => version + 1);
+  }, []);
 
   useEffect(() => {
     let active = true;
 
-    async function loadBudgets() {
+    async function loadDashboard() {
       setLoading(true);
       setError('');
 
       try {
-        const result = await apiRequest(
-          `/api/budgets/remaining?month=${encodeURIComponent(month)}`,
-        );
+        const [budgetResult, categoryResult, expenseResult, recurringResult, alertResult, healthResult] =
+          await Promise.all([
+            apiRequest(
+              `/api/budgets/remaining?month=${encodeURIComponent(month)}`,
+            ),
+            apiRequest('/api/categories'),
+            apiRequest('/api/expenses'),
+            apiRequest('/api/recurring-expenses'),
+            apiRequest(
+              `/api/budgets/alerts?month=${encodeURIComponent(month)}`,
+            ),
+            apiRequest(
+              `/api/financial-health?month=${encodeURIComponent(month)}`,
+            ),
+          ]);
 
-        if (active) {
-          setBudgets(result.remainingBudgets || []);
+        if (!active) return;
+
+        setBudgets(budgetResult.remainingBudgets || []);
+        setCategories(categoryResult.categories || []);
+        setExpenses(expenseResult.expenses || []);
+        setRecurringExpenses(recurringResult.recurringExpenses || []);
+        setBudgetAlerts(alertResult.alerts || []);
+        setFinancialHealth(healthResult.health || null);
+
+        try {
+          await apiRequest('/api/recurring-expenses/generate-due', {
+            method: 'POST',
+            body: JSON.stringify({ today: localToday() }),
+          });
+
+          const recurringResult = await apiRequest('/api/recurring-expenses');
+          if (active) {
+            setRecurringExpenses(recurringResult.recurringExpenses || []);
+          }
+
+          await apiRequest('/api/notifications/payment-reminders', {
+            method: 'POST',
+            body: JSON.stringify({ today: localToday() }),
+          });
+          const notificationResult = await apiRequest('/api/notifications');
+          if (active) {
+            setNotifications(notificationResult.notifications || []);
+          }
+        } catch (notificationError) {
+          console.error('Could not load payment reminders:', notificationError);
         }
       } catch (err) {
         if (active) {
-          setError(err.message || 'Could not load budgets.');
-          setBudgets([]);
+          setError(err.message || 'Could not load dashboard data.');
         }
       } finally {
         if (active) setLoading(false);
       }
     }
 
-    loadBudgets();
+    loadDashboard();
 
     return () => {
       active = false;
@@ -210,7 +304,294 @@ function Dashboard({ user, onLogout }) {
     (budget) => budget.category_id !== null,
   );
 
+  const monthExpenses = expenses.filter(
+    (expense) => String(expense.spent_on).slice(0, 7) === month,
+  );
+
+  const monthSpent = monthExpenses.reduce(
+    (total, expense) => total + Number(expense.amount || 0),
+    0,
+  );
+
+  const sortedExpenses = [...expenses].sort((a, b) => {
+    const dateCompare = String(b.spent_on).localeCompare(String(a.spent_on));
+    if (dateCompare !== 0) return dateCompare;
+
+    return String(b.created_at || '').localeCompare(
+      String(a.created_at || ''),
+    );
+  });
+
+  function updateField(event) {
+    const { name, value } = event.target;
+
+    setExpenseForm((current) => ({
+      ...current,
+      [name]: value,
+    }));
+  }
+
+  function startEditing(expense) {
+    setEditingId(expense.id);
+
+    setExpenseForm({
+      amount: String(expense.amount),
+      category_id: expense.category_id,
+      spent_on: String(expense.spent_on).slice(0, 10),
+      merchant: expense.merchant || '',
+      note: expense.note || '',
+    });
+
+    setMessage('');
+    setError('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+    setExpenseForm({ ...emptyExpense, spent_on: localToday() });
+    setError('');
+    setMessage('');
+  }
+
+  async function handleExpenseSubmit(event) {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+
+    if (!expenseForm.category_id) {
+      setError('Please select a category.');
+      return;
+    }
+
+    const amount = Number(expenseForm.amount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Amount must be greater than zero.');
+      return;
+    }
+
+    if (expenseForm.spent_on > localToday()) {
+      setError('Expense date cannot be in the future.');
+      return;
+    }
+
+    setSaving(true);
+
+    const payload = {
+      amount,
+      category_id: expenseForm.category_id,
+      spent_on: expenseForm.spent_on,
+      merchant: expenseForm.merchant.trim() || null,
+      note: expenseForm.note.trim() || null,
+    };
+
+    try {
+      if (editingId) {
+        await apiRequest(
+          `/api/expenses/${encodeURIComponent(editingId)}`,
+          {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+          },
+        );
+
+        setMessage('Expense updated successfully.');
+      } else {
+        await apiRequest('/api/expenses', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+
+        setMessage('Expense added successfully.');
+      }
+
+      setEditingId(null);
+      setExpenseForm({ ...emptyExpense, spent_on: localToday() });
+      refreshData();
+    } catch (err) {
+      setError(err.message || 'Could not save expense.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(expense) {
+    const confirmed = window.confirm(
+      `Delete this expense of ${formatCurrency(expense.amount)}? This cannot be undone.`,
+    );
+
+    if (!confirmed) return;
+
+    setError('');
+    setMessage('');
+
+    try {
+      await apiRequest(
+        `/api/expenses/${encodeURIComponent(expense.id)}`,
+        { method: 'DELETE' },
+      );
+
+      if (editingId === expense.id) cancelEditing();
+
+      setMessage('Expense deleted successfully.');
+      refreshData();
+    } catch (err) {
+      setError(err.message || 'Could not delete expense.');
+    }
+  }
+
+  async function handleReviewExpense(expense) {
+    setError('');
+    setMessage('');
+
+    try {
+      await apiRequest(
+        `/api/expenses/${encodeURIComponent(expense.id)}/review`,
+        { method: 'PATCH' },
+      );
+
+      setExpenses((current) =>
+        current.map((item) =>
+          item.id === expense.id
+            ? { ...item, is_flagged: false }
+            : item,
+        ),
+      );
+
+      setMessage('Expense marked as reviewed.');
+    } catch (err) {
+      setError(err.message || 'Could not review expense.');
+    }
+  }
+
+
+  async function handleBudgetSubmit(event) {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+
+    const amount = Number(budgetAmount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Budget must be greater than zero.');
+      return;
+    }
+
+    setBudgetSaving(true);
+
+    try {
+      await apiRequest('/api/budgets', {
+        method: 'POST',
+        body: JSON.stringify({
+          month,
+          amount,
+          category_id: null,
+        }),
+      });
+
+      setBudgetAmount('');
+      setMessage('Monthly budget saved successfully.');
+      refreshData();
+    } catch (err) {
+      setError(err.message || 'Could not save monthly budget.');
+    } finally {
+      setBudgetSaving(false);
+    }
+  }
+
+  async function handleCategoryBudgetSubmit(event) {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+
+    const amount = Number(categoryBudgetForm.amount);
+
+    if (!categoryBudgetForm.category_id) {
+      setError('Please select a category.');
+      return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Category budget must be greater than zero.');
+      return;
+    }
+
+    setCategoryBudgetSaving(true);
+
+    try {
+      await apiRequest('/api/budgets', {
+        method: 'POST',
+        body: JSON.stringify({
+          month,
+          amount,
+          category_id: categoryBudgetForm.category_id,
+        }),
+      });
+
+      setCategoryBudgetForm({ category_id: '', amount: '' });
+      setMessage('Category budget saved successfully.');
+      refreshData();
+    } catch (err) {
+      setError(err.message || 'Could not save category budget.');
+    } finally {
+      setCategoryBudgetSaving(false);
+    }
+  }
+
+  async function handleCreateRecurringExpense(event) {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+    setRecurringSaving(true);
+
+    try {
+      await apiRequest('/api/recurring-expenses', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...recurringForm,
+          amount: Number(recurringForm.amount),
+          note: recurringForm.note.trim() || null,
+        }),
+      });
+
+      const result = await apiRequest('/api/recurring-expenses');
+      setRecurringExpenses(result.recurringExpenses || []);
+      setRecurringForm({
+        category_id: '',
+        amount: '',
+        cycle: 'monthly',
+        start_date: localToday(),
+        note: '',
+      });
+      setMessage('Recurring payment created successfully.');
+    } catch (err) {
+      setError(err.message || 'Could not create recurring payment.');
+    } finally {
+      setRecurringSaving(false);
+    }
+  }
+  async function handleMarkNotificationRead(notification) {
+    setError('');
+
+    try {
+      await apiRequest(`/api/notifications/${notification.id}/read`, {
+        method: 'PATCH',
+      });
+
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === notification.id ? { ...item, is_read: true } : item,
+        ),
+      );
+    } catch (err) {
+      setError(err.message || 'Could not mark notification as read.');
+    }
+  }
+
   async function handleLogout() {
+    setError('');
+
     try {
       await apiRequest('/api/auth/logout', { method: 'POST' });
       await onLogout();
@@ -218,7 +599,6 @@ function Dashboard({ user, onLogout }) {
       setError(err.message || 'Could not log out.');
     }
   }
-
   return (
     <main className="dashboard">
       <header className="dashboard-header">
@@ -237,49 +617,386 @@ function Dashboard({ user, onLogout }) {
               onChange={(event) => setMonth(event.target.value)}
             />
           </label>
-          <button type="button" className="secondary-button" onClick={handleLogout}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={handleLogout}
+          >
             Log out
           </button>
         </div>
       </header>
 
       <section className="connection-panel">
-        <span>API and database: <strong className="status status-ok">Connected</strong></span>
-        <button
-          type="button"
-          onClick={() => setRefreshVersion((version) => version + 1)}
-          disabled={loading}
-        >
-          {loading ? 'Refreshing…' : 'Refresh budgets'}
+        <span>
+          API and database:{' '}
+          <strong className="status status-ok">Connected</strong>
+        </span>
+        <button type="button" onClick={refreshData} disabled={loading}>
+          {loading ? 'Refreshing…' : 'Refresh dashboard'}
         </button>
       </section>
 
-      {error && <p className="error-message" role="alert">{error}</p>}
+      {error && (
+        <p className="error-message" role="alert">
+          {error}
+        </p>
+      )}
+
+      {message && (
+        <p className="success-message" role="status">
+          {message}
+        </p>
+      )}
+
+      {budgetAlerts.length > 0 && (
+        <section className="budget-alerts" aria-label="Budget alerts">
+          <h2>Budget alerts</h2>
+          {budgetAlerts.map((alert) => (
+            <div
+              className="warning-message"
+              role="alert"
+              key={`${alert.budget_id}-${alert.threshold}`}
+            >
+              <strong>
+                {alert.threshold}% — {alert.category_name || 'Overall budget'}:
+              </strong>{' '}
+              {alert.message}{' '}
+              ({formatCurrency(alert.spent_amount)} spent of{' '}
+              {formatCurrency(alert.budget_amount)};{' '}
+              {alert.percentage_used}% used.)
+            </div>
+          ))}
+        </section>
+      )}
+
+      <section className="budget-alerts" aria-label="Recurring payments">
+        <h2>Recurring Payments</h2>
+        <p>Create and view your weekly or monthly recurring payments.</p>
+
+        <form onSubmit={handleCreateRecurringExpense} className="expense-form">
+          <label>
+            Category
+            <select
+              value={recurringForm.category_id}
+              onChange={(event) =>
+                setRecurringForm((current) => ({
+                  ...current,
+                  category_id: event.target.value,
+                }))
+              }
+              required
+            >
+              <option value="">Select a category</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Amount
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={recurringForm.amount}
+              onChange={(event) =>
+                setRecurringForm((current) => ({
+                  ...current,
+                  amount: event.target.value,
+                }))
+              }
+              placeholder="Enter amount"
+              required
+            />
+          </label>
+
+          <label>
+            Frequency
+            <select
+              value={recurringForm.cycle}
+              onChange={(event) =>
+                setRecurringForm((current) => ({
+                  ...current,
+                  cycle: event.target.value,
+                }))
+              }
+            >
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </label>
+
+          <label>
+            First due date
+            <input
+              type="date"
+              value={recurringForm.start_date}
+              onChange={(event) =>
+                setRecurringForm((current) => ({
+                  ...current,
+                  start_date: event.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+
+          <label>
+            Note (optional)
+            <input
+              type="text"
+              maxLength="255"
+              value={recurringForm.note}
+              onChange={(event) =>
+                setRecurringForm((current) => ({
+                  ...current,
+                  note: event.target.value,
+                }))
+              }
+              placeholder="e.g. Internet bill"
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={recurringSaving || categories.length === 0}
+          >
+            {recurringSaving ? 'Saving...' : 'Add recurring payment'}
+          </button>
+        </form>
+
+        <h3>Saved recurring payments ({recurringExpenses.length})</h3>
+
+        {recurringExpenses.length === 0 ? (
+          <p>No recurring payments added yet.</p>
+        ) : (
+          <div className="summary-grid">
+            {recurringExpenses.map((payment) => (
+              <article className="summary-card" key={payment.id}>
+                <h3>{payment.category_name || 'Recurring payment'}</h3>
+                <p>Amount: {formatCurrency(payment.amount)}</p>
+                <p>Frequency: {payment.cycle}</p>
+                <p>Next due: {payment.next_due_date}</p>
+                {payment.note && <p>Note: {payment.note}</p>}
+                <p>Status: {payment.is_active ? 'Active' : 'Inactive'}</p>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+      <section className="budget-alerts" aria-label="Notifications">
+        <h2>
+          Notifications ({notifications.filter((item) => !item.is_read).length} unread)
+        </h2>
+
+        {notifications.length === 0 ? (
+          <p>No notifications yet. Payment reminders will appear here when recurring payments are due.</p>
+        ) : (
+          notifications.map((notification) => (
+            <div
+              className={notification.is_read ? "summary-card" : "warning-message"}
+              key={notification.id}
+            >
+              <p>{notification.message}</p>
+              {!notification.is_read && (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => handleMarkNotificationRead(notification)}
+                >
+                  Mark as read
+                </button>
+              )}
+            </div>
+          ))
+        )}
+      </section>
+
+      <section className="budget-alerts" aria-label="Financial health score">
+        <h2>Financial Health Score</h2>
+        {financialHealth ? (
+          <>
+            <div className="summary-grid">
+              <article className="summary-card">
+                <p>Score</p>
+                <h2>{financialHealth.score}/100</h2>
+                <p>{financialHealth.rating}</p>
+              </article>
+              <article className="summary-card">
+                <p>Savings</p>
+                <h2>{formatCurrency(financialHealth.savings)}</h2>
+                <p>
+                  Savings rate:{' '}
+                  {financialHealth.savings_rate === null
+                    ? 'Not available'
+                    : `${financialHealth.savings_rate}%`}
+                </p>
+              </article>
+              <article className="summary-card">
+                <p>Monthly expenses</p>
+                <h2>{formatCurrency(financialHealth.total_expenses)}</h2>
+                <p>
+                  Budget usage:{' '}
+                  {financialHealth.budget_usage_rate === null
+                    ? 'No budget set'
+                    : `${financialHealth.budget_usage_rate}%`}
+                </p>
+              </article>
+            </div>
+            <h3>Why you received this score</h3>
+            {financialHealth.explanation?.length ? (
+              <ul>
+                {financialHealth.explanation.map((reason, index) => (
+                  <li key={`${index}-${reason}`}>{reason}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted">No explanation is available for this month.</p>
+            )}
+          </>
+        ) : (
+          <p className="muted">Financial health data is not available yet.</p>
+        )}
+      </section>
 
       <section className="summary-grid" aria-label="Budget summary">
         <article className="summary-card">
           <p>Total monthly budget</p>
-          <h2>{overallBudget ? formatCurrency(overallBudget.budget_amount) : 'Not set'}</h2>
+          <h2>
+            {overallBudget
+              ? formatCurrency(overallBudget.budget_amount)
+              : 'Not set'}
+          </h2>
         </article>
+
         <article className="summary-card">
-          <p>Total spent</p>
-          <h2>{overallBudget ? formatCurrency(overallBudget.spent_amount) : '—'}</h2>
+          <p>Spent this month</p>
+          <h2>{formatCurrency(monthSpent)}</h2>
         </article>
+
         <article className="summary-card">
           <p>Remaining budget</p>
           <h2 className={overallBudget?.exceeded ? 'amount-negative' : ''}>
-            {overallBudget ? formatCurrency(overallBudget.remaining_amount) : '—'}
+            {overallBudget
+              ? formatCurrency(overallBudget.remaining_amount)
+              : '—'}
           </h2>
         </article>
+      </section>
+
+      <section className="expense-section">
+        <h2>
+          {overallBudget ? 'Update monthly budget' : 'Set monthly budget'}
+        </h2>
+        <p className="muted">
+          Set the overall spending limit for {month}. Category budgets must fit
+          within this overall limit.
+        </p>
+
+        <form className="expense-form" onSubmit={handleBudgetSubmit}>
+          <label>
+            Monthly budget (₹)
+            <input
+              type="number"
+              min="0.01"
+              max="9999999999.99"
+              step="0.01"
+              value={budgetAmount}
+              onChange={(event) => setBudgetAmount(event.target.value)}
+              placeholder={
+                overallBudget
+                  ? String(overallBudget.budget_amount)
+                  : 'e.g. 10000'
+              }
+              required
+            />
+          </label>
+
+          <div className="expense-form-actions">
+            <button type="submit" disabled={budgetSaving}>
+              {budgetSaving
+                ? 'Saving…'
+                : overallBudget
+                  ? 'Update budget'
+                  : 'Save monthly budget'}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="expense-section">
+        <h2>Set category budget</h2>
+        <p className="muted">
+          Set a spending limit for one category in {month}. The combined
+          category budgets cannot exceed the overall monthly budget.
+        </p>
+
+        <form
+          className="expense-form"
+          onSubmit={handleCategoryBudgetSubmit}
+        >
+          <label>
+            Category
+            <select
+              value={categoryBudgetForm.category_id}
+              onChange={(event) =>
+                setCategoryBudgetForm((current) => ({
+                  ...current,
+                  category_id: event.target.value,
+                }))
+              }
+              required
+            >
+              <option value="">Select a category</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Category budget (₹)
+            <input
+              type="number"
+              min="0.01"
+              max="9999999999.99"
+              step="0.01"
+              value={categoryBudgetForm.amount}
+              onChange={(event) =>
+                setCategoryBudgetForm((current) => ({
+                  ...current,
+                  amount: event.target.value,
+                }))
+              }
+              placeholder="e.g. 1000"
+              required
+            />
+          </label>
+
+          <div className="expense-form-actions">
+            <button
+              type="submit"
+              disabled={categoryBudgetSaving || categories.length === 0}
+            >
+              {categoryBudgetSaving ? 'Saving…' : 'Save category budget'}
+            </button>
+          </div>
+        </form>
       </section>
 
       <section className="budget-section">
         <h2>Category budgets</h2>
         <p className="muted">Spending and remaining amounts for {month}.</p>
 
-        {loading && <p role="status">Loading budgets…</p>}
+        {loading && <p role="status">Loading dashboard…</p>}
 
-        {!loading && !error && budgets.length === 0 && (
+        {!loading && budgets.length === 0 && (
           <div className="empty-state">
             <h3>No budgets found</h3>
             <p>Create a monthly budget to see your remaining balance.</p>
@@ -289,9 +1006,10 @@ function Dashboard({ user, onLogout }) {
         {!loading && categoryBudgets.length > 0 && (
           <div className="budget-list">
             {categoryBudgets.map((budget) => {
-              const percentage = budget.budget_amount > 0
-                ? Math.min(100, (budget.spent_amount / budget.budget_amount) * 100)
-                : 0;
+              const amount = Number(budget.budget_amount) || 0;
+              const spent = Number(budget.spent_amount) || 0;
+              const percentage =
+                amount > 0 ? Math.min(100, (spent / amount) * 100) : 0;
 
               return (
                 <article className="budget-card" key={budget.budget_id}>
@@ -299,12 +1017,17 @@ function Dashboard({ user, onLogout }) {
                     <div>
                       <h3>{budget.category_name || 'Category'}</h3>
                       <p className="muted">
-                        {formatCurrency(budget.spent_amount)} spent of{' '}
-                        {formatCurrency(budget.budget_amount)}
+                        {formatCurrency(spent)} spent of{' '}
+                        {formatCurrency(amount)}
                       </p>
                     </div>
+
                     <div className="budget-remaining">
-                      <strong className={budget.exceeded ? 'amount-negative' : ''}>
+                      <strong
+                        className={
+                          budget.exceeded ? 'amount-negative' : ''
+                        }
+                      >
                         {formatCurrency(budget.remaining_amount)}
                       </strong>
                       <span>remaining</span>
@@ -314,19 +1037,23 @@ function Dashboard({ user, onLogout }) {
                   <div
                     className="progress-track"
                     role="progressbar"
-                    aria-label={`${budget.category_name} budget used`}
+                    aria-label={`${budget.category_name || 'Category'} budget used`}
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-valuenow={Math.round(percentage)}
                   >
                     <div
-                      className={`progress-fill ${budget.exceeded ? 'progress-exceeded' : ''}`}
+                      className={`progress-fill ${
+                        budget.exceeded ? 'progress-exceeded' : ''
+                      }`}
                       style={{ width: `${percentage}%` }}
                     />
                   </div>
 
                   {budget.exceeded && (
-                    <p className="warning-message">This category budget has been exceeded.</p>
+                    <p className="warning-message">
+                      This category budget has been exceeded.
+                    </p>
                   )}
                 </article>
               );
@@ -334,19 +1061,217 @@ function Dashboard({ user, onLogout }) {
           </div>
         )}
 
-        {!loading && overallBudget?.exceeded && (
-          <p className="warning-message">Your overall monthly budget has been exceeded.</p>
+        {overallBudget?.exceeded && (
+          <p className="warning-message">
+            Your overall monthly budget has been exceeded.
+          </p>
+        )}
+      </section>
+
+      <section className="expense-section">
+        <h2>{editingId ? 'Edit expense' : 'Add an expense'}</h2>
+        <p className="muted">
+          Record your spending. Your remaining budget refreshes after saving.
+        </p>
+
+        {categories.length === 0 && !loading && (
+          <p className="warning-message">
+            No categories are available. Check the category API before adding
+            an expense.
+          </p>
+        )}
+
+        <form className="expense-form" onSubmit={handleExpenseSubmit}>
+          <label>
+            Amount (₹)
+            <input
+              name="amount"
+              type="number"
+              min="0.01"
+              max="9999999999.99"
+              step="0.01"
+              value={expenseForm.amount}
+              onChange={updateField}
+              placeholder="e.g. 250"
+              required
+            />
+          </label>
+
+          <label>
+            Category
+            <select
+              name="category_id"
+              value={expenseForm.category_id}
+              onChange={updateField}
+              required
+            >
+              <option value="">Select a category</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Date
+            <input
+              name="spent_on"
+              type="date"
+              value={expenseForm.spent_on}
+              max={localToday()}
+              onChange={updateField}
+              required
+            />
+          </label>
+
+          <label>
+            Merchant (optional)
+            <input
+              name="merchant"
+              value={expenseForm.merchant}
+              onChange={updateField}
+              maxLength={100}
+              placeholder="e.g. Swiggy"
+            />
+          </label>
+
+          <label className="expense-note-field">
+            Note (optional)
+            <textarea
+              name="note"
+              value={expenseForm.note}
+              onChange={updateField}
+              maxLength={255}
+              rows={3}
+              placeholder="Add a short note"
+            />
+          </label>
+
+          <div className="expense-form-actions">
+            <button
+              type="submit"
+              disabled={saving || categories.length === 0}
+            >
+              {saving
+                ? 'Saving…'
+                : editingId
+                  ? 'Save changes'
+                  : 'Add expense'}
+            </button>
+
+            {editingId && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={cancelEditing}
+                disabled={saving}
+              >
+                Cancel edit
+              </button>
+            )}
+          </div>
+        </form>
+      </section>
+
+      <section className="expense-section">
+        <div className="expense-list-heading">
+          <div>
+            <h2>Expense history</h2>
+            <p className="muted">
+              Showing all your recorded expenses. Selected month: {month}.
+            </p>
+          </div>
+          <strong>{monthExpenses.length} this month</strong>
+        </div>
+
+        {!loading && sortedExpenses.length === 0 && (
+          <div className="empty-state">
+            <h3>No expenses yet</h3>
+            <p>Add your first expense using the form above.</p>
+          </div>
+        )}
+
+        {sortedExpenses.length > 0 && (
+          <div className="expense-table-wrapper">
+            <table className="expense-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Expense</th>
+                  <th>Category</th>
+                  <th>Amount</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedExpenses.map((expense) => (
+  <tr key={expense.id}>
+    <td>{String(expense.spent_on).slice(0, 10)}</td>
+    <td>
+      <strong>{expense.merchant || 'Expense'}</strong>
+      {expense.note && (
+        <p className="muted expense-note">{expense.note}</p>
+      )}
+      {expense.is_flagged && (
+        <p className="expense-warning">
+          ⚠ Unusual spending detected
+        </p>
+      )}
+    </td>
+    <td>
+      {expense.category_name ||
+        categories.find(
+          (category) => category.id === expense.category_id,
+        )?.name ||
+        'Category'}
+    </td>
+    <td className="expense-amount">
+      {formatCurrency(expense.amount)}
+    </td>
+    <td>
+      <div className="table-actions">
+        {expense.is_flagged && (
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => handleReviewExpense(expense)}
+          >
+            Mark as reviewed
+          </button>
+        )}
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => startEditing(expense)}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          className="danger-button"
+          onClick={() => handleDelete(expense)}
+        >
+          Delete
+        </button>
+      </div>
+    </td>
+  </tr>
+))}
+
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
       <footer className="dashboard-footer">
-        <p className="muted">
-          Signed in as {user.email}. Expense forms will be connected next.
-        </p>
+        <p className="muted">Signed in as {user.email}.</p>
         <button
           type="button"
           className="secondary-button"
-          onClick={() => setRefreshVersion((version) => version + 1)}
+          onClick={refreshData}
           disabled={loading}
         >
           Recalculate remaining budget
@@ -398,7 +1323,11 @@ export default function App() {
   }
 
   if (checkingSession) {
-    return <main className="auth-page"><p role="status">Checking your session…</p></main>;
+    return (
+      <main className="auth-page">
+        <p role="status">Checking your session…</p>
+      </main>
+    );
   }
 
   if (!user) {
@@ -406,7 +1335,10 @@ export default function App() {
       <>
         <AuthScreen onLogin={loadCurrentUser} />
         <p className="auth-api-status">
-          API: <strong className={`status status-${apiStatus}`}>{apiStatus}</strong>
+          API:{' '}
+          <strong className={`status status-${apiStatus}`}>
+            {apiStatus}
+          </strong>
         </p>
       </>
     );

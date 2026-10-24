@@ -138,3 +138,57 @@ export async function markRecurringExpensePaid(userId, recurringExpenseId, dueDa
   });
 }
 
+
+
+export async function listRecurringExpenses(userId) {
+  return withUser(userId, async (db) => {
+    const { rows } = await db.query(
+      `SELECT r.id, r.category_id, c.name AS category_name,
+              r.amount, r.cycle, r.start_date::text AS start_date,
+              r.next_due_date::text AS next_due_date, r.note,
+              r.is_active,
+              r.last_paid_due_date::text AS last_paid_due_date
+       FROM recurring_expenses r
+       JOIN categories c ON c.id = r.category_id
+       WHERE r.user_id = $1
+       ORDER BY r.is_active DESC, r.next_due_date ASC`,
+      [userId],
+    );
+
+    return rows;
+  });
+}
+
+export async function createRecurringExpense(userId, data) {
+  return withUser(userId, async (db) => {
+    const { rows: categories } = await db.query(
+      `SELECT id FROM categories
+       WHERE id = $1
+         AND (user_id IS NULL OR user_id = $2)`,
+      [data.category_id, userId],
+    );
+
+    if (!categories[0]) return null;
+
+    const { rows } = await db.query(
+      `INSERT INTO recurring_expenses
+         (user_id, category_id, amount, cycle, start_date,
+          next_due_date, note)
+       VALUES ($1, $2, $3, $4, $5::date, $5::date, $6)
+       RETURNING id, category_id, amount, cycle,
+                 start_date::text AS start_date,
+                 next_due_date::text AS next_due_date,
+                 note, is_active`,
+      [
+        userId,
+        data.category_id,
+        data.amount,
+        data.cycle,
+        data.start_date,
+        data.note ?? null,
+      ],
+    );
+
+    return rows[0];
+  });
+}

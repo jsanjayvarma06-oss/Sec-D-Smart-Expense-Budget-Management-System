@@ -1,46 +1,431 @@
+
 :root {
-  --bg: #f6f7f9;
-  --text: #1c2430;
-  --muted: #5d6878;
-  --ok: #1f6f5c;
-  --error: #b42318;
-  color-scheme: light dark;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   line-height: 1.5;
+  color: #1c2430;
+  background: #f6f7f9;
+  font-synthesis: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #12161c;
-    --text: #e6e9ee;
-    --muted: #9aa4b2;
-    --ok: #3fb08f;
-    --error: #f97066;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
+  min-width: 320px;
+  background: #f6f7f9;
+  color: #1c2430;
 }
 
-.placeholder {
-  min-height: 100vh;
-  display: grid;
-  place-content: center;
-  text-align: center;
-  padding: 1rem;
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 16px;
+  background: #245bdb;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button:hover {
+  filter: brightness(0.95);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid #cbd2dc;
+  border-radius: 8px;
+  background: #fff;
+  color: #1c2430;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 8px;
+  font-size: clamp(26px, 4vw, 36px);
+}
+
+h2 {
+  font-size: 22px;
+}
+
+h3 {
+  margin-bottom: 6px;
 }
 
 .muted {
-  color: var(--muted);
+  color: #667085;
+}
+
+.eyebrow {
+  margin-bottom: 8px;
+  color: #245bdb;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.auth-page {
+  min-height: 90vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: min(100%, 440px);
+  padding: 32px;
+  border: 1px solid #e1e5eb;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 12px 35px #10182812;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 22px 0;
+}
+
+.auth-tabs button {
+  flex: 1;
+  background: #eef2f8;
+  color: #344054;
+}
+
+.auth-tabs button.active {
+  background: #245bdb;
+  color: #fff;
+}
+
+.auth-form,
+.expense-form {
+  display: grid;
+  gap: 18px;
+}
+
+.auth-api-status {
+  text-align: center;
+}
+
+.dashboard {
+  width: min(1200px, 100%);
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+}
+
+.dashboard-header,
+.header-actions,
+.connection-panel,
+.budget-card-heading,
+.expense-list-heading,
+.dashboard-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.dashboard-header {
+  margin-bottom: 24px;
+}
+
+.header-actions {
+  align-items: flex-end;
+}
+
+.month-picker {
+  width: 160px;
+}
+
+.secondary-button {
+  border: 1px solid #cbd2dc;
+  background: #fff;
+  color: #344054;
+}
+
+.danger-button {
+  background: #b42318;
+}
+
+.connection-panel,
+.summary-card,
+.budget-card,
+.expense-section,
+.empty-state {
+  border: 1px solid #e1e5eb;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.connection-panel {
+  padding: 14px 18px;
+  margin-bottom: 24px;
 }
 
 .status-ok {
-  color: var(--ok);
+  color: #16805d;
 }
 
 .status-error {
-  color: var(--error);
+  color: #b42318;
+}
+
+.status-checking {
+  color: #667085;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.summary-card {
+  padding: 22px;
+}
+
+.summary-card p {
+  margin-bottom: 8px;
+  color: #667085;
+}
+
+.summary-card h2 {
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
+.budget-section,
+.expense-section {
+  margin-bottom: 28px;
+}
+
+.budget-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.budget-card {
+  padding: 18px;
+}
+
+.budget-card-heading {
+  align-items: flex-start;
+}
+
+.budget-card-heading p {
+  margin-bottom: 0;
+}
+
+.budget-remaining {
+  text-align: right;
+}
+
+.budget-remaining strong,
+.budget-remaining span {
+  display: block;
+}
+
+.progress-track {
+  height: 9px;
+  overflow: hidden;
+  margin-top: 16px;
+  border-radius: 99px;
+  background: #e9edf3;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #245bdb;
+}
+
+.progress-exceeded {
+  background: #d92d20;
+}
+
+.amount-negative {
+  color: #b42318;
+}
+
+.warning-message,
+.error-message,
+.success-message {
+  padding: 12px 14px;
+  border-radius: 8px;
+}
+
+.warning-message,
+.error-message {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.success-message {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.expense-section {
+  padding: 24px;
+}
+
+.expense-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 20px;
+}
+
+.expense-note-field {
+  grid-column: 1 / -1;
+}
+
+.expense-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  grid-column: 1 / -1;
+}
+
+.expense-list-heading {
+  margin-bottom: 16px;
+}
+
+.expense-list-heading p {
+  margin-bottom: 0;
+}
+
+.expense-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.expense-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.expense-table th,
+.expense-table td {
+  padding: 13px 12px;
+  border-bottom: 1px solid #e8ebf0;
+  vertical-align: top;
+}
+
+.expense-table th {
+  background: #f8fafc;
+  color: #475467;
+  font-size: 13px;
+}
+
+.expense-amount {
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.expense-note {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.table-actions button {
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.empty-state {
+  padding: 24px;
+  text-align: center;
+}
+
+.empty-state p {
+  margin-bottom: 0;
+  color: #667085;
+}
+
+.dashboard-footer {
+  flex-wrap: wrap;
+  margin-top: 28px;
+}
+
+.dashboard-footer p {
+  margin-bottom: 0;
+}
+
+@media (max-width: 760px) {
+  .dashboard {
+    padding: 20px 14px 36px;
+  }
+
+  .dashboard-header,
+  .header-actions,
+  .connection-panel,
+  .expense-list-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .month-picker {
+    width: 100%;
+  }
+
+  .summary-grid,
+  .budget-list,
+  .expense-form {
+    grid-template-columns: 1fr;
+  }
+
+  .expense-note-field,
+  .expense-form-actions {
+    grid-column: auto;
+  }
+
+  .expense-section {
+    padding: 16px;
+  }
+
+  .auth-card {
+    padding: 24px;
+  }
 }

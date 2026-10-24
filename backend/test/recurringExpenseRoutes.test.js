@@ -56,6 +56,74 @@ describe('Recurring expense API', () => {
       .expect(400);
   });
 
+  test('lists recurring expenses for the authenticated user', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+    const categoryId = await createCategory(user.id);
+
+    await createRecurringExpense(user.id, categoryId);
+
+    const response = await request(app)
+      .get('/api/recurring-expenses')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    assert.equal(response.body.recurringExpenses.length, 1);
+    assert.equal(response.body.recurringExpenses[0].category_id, categoryId);
+    assert.equal(response.body.recurringExpenses[0].cycle, 'weekly');
+  });
+
+  test('creates a recurring expense with valid data', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+    const categoryId = await createCategory(user.id);
+
+    const response = await request(app)
+      .post('/api/recurring-expenses')
+      .set('Cookie', cookie)
+      .send({
+        category_id: categoryId,
+        amount: 500,
+        cycle: 'monthly',
+        start_date: '2026-10-25',
+        note: 'Monthly subscription',
+      })
+      .expect(201);
+
+    assert.equal(response.body.recurringExpense.amount, '500.00');
+    assert.equal(response.body.recurringExpense.cycle, 'monthly');
+    assert.equal(response.body.recurringExpense.start_date, '2026-10-25');
+    assert.equal(response.body.recurringExpense.next_due_date, '2026-10-25');
+  });
+
+  test('rejects invalid recurring expense data', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+    const categoryId = await createCategory(user.id);
+
+    await request(app)
+      .post('/api/recurring-expenses')
+      .set('Cookie', cookie)
+      .send({
+        category_id: categoryId,
+        amount: -50,
+        cycle: 'yearly',
+        start_date: 'not-a-date',
+      })
+      .expect(400);
+  });
+
+  test('requires authentication to create a recurring expense', async () => {
+    await request(app)
+      .post('/api/recurring-expenses')
+      .send({
+        category_id: '00000000-0000-4000-8000-000000000001',
+        amount: 500,
+        cycle: 'monthly',
+        start_date: '2026-10-25',
+      })
+      .expect(401);
+  });
   test('generates due recurring expenses', async () => {
     const user = await createUser();
     const cookie = await loginAs(user);
