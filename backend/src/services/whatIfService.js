@@ -1,5 +1,6 @@
 
 import { withUser } from '../db/userScope.js';
+import { forecastMonthlySpending } from './forecastService.js';
 
 function validateMonth(month) {
   if (
@@ -36,34 +37,45 @@ export async function simulateBudget(
   const budget = validateAmount(proposedBudget, 'Proposed budget');
   const income = validateAmount(proposedIncome, 'Proposed income');
 
-  return withUser(userId, async (db) => {
-    const { rows } = await db.query(
-      `SELECT
-         COALESCE(SUM(amount), 0)::numeric(12,2) AS total_spent,
-         COUNT(*)::integer AS transaction_count
-       FROM expenses
-       WHERE user_id = $1
-         AND spent_on >= $2::date
-         AND spent_on < ($2::date + INTERVAL '1 month')`,
-      [userId, monthStart],
-    );
+  const [spendingResult, forecast] = await Promise.all([
+    withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `SELECT
+           COALESCE(SUM(amount), 0)::numeric(12,2) AS total_spent,
+           COUNT(*)::integer AS transaction_count
+         FROM expenses
+         WHERE user_id = $1
+           AND spent_on >= $2::date
+           AND spent_on < ($2::date + INTERVAL '1 month')`,
+        [userId, monthStart],
+      );
 
-    const totalSpent = Number(rows[0].total_spent);
-    const remainingBudget = Math.round((budget - totalSpent) * 100) / 100;
-    const savings = Math.round((income - totalSpent) * 100) / 100;
+      return {
+        totalSpent: Number(rows[0].total_spent),
+        transactionCount: rows[0].transaction_count,
+      };
+    }),
+    forecastMonthlySpending(userId),
+  ]);
 
-    return {
-      month,
-      current_spending: totalSpent,
-      transaction_count: rows[0].transaction_count,
-      proposed_budget: budget,
-      proposed_income: income,
-      remaining_budget: remainingBudget,
-      budget_exceeded: remainingBudget < 0,
-      projected_savings: savings,
-      savings_rate: income > 0
-        ? Math.round((savings / income) * 10000) / 100
-        : null,
-    };
-  });
+  const totalSpent = spendingResult.totalSpent;
+  const remainingBudget = Math.round((budget - totalSpent) * 100) / 100;
+  const savings = Math.round((income - totalSpent) * 100) / 100;
+
+  return {
+    month,
+    current_spending: totalSpent,
+    transaction_count: spendingResult.transactionCount,
+    proposed_budget: budget,
+    proposed_income: income,
+    remaining_budget: remainingBudget,
+    budget_exceeded: remainingBudget < 0,
+    projected_savings: savings,
+    savings_rate: income > 0
+      ? Math.round((savings / income) * 10000) / 100
+      : null,
+    spending_forecast: forecast.forecast,
+    forecast_available: forecast.available,
+    forecast_reason: forecast.reason,
+  };
 }
