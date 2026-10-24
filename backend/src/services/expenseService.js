@@ -144,5 +144,24 @@ export async function deleteExpense(userId, expenseId) {
   });
 }
 
+export async function dismissExpenseFlag(userId, expenseId) {
+  return withUser(userId, async (db) => {
+    const { rows } = await db.query(
+      `UPDATE expenses
+       SET is_flagged = false,
+           updated_at = now()
+       WHERE id = $1
+         AND user_id = $2
+         AND is_flagged = true
+       RETURNING id, category_id, amount, spent_on, note, merchant,
+                 is_flagged, created_at, updated_at`,
+      [expenseId, userId],
+    );
+
+    return formatExpense(rows[0] ?? null);
+  });
+}
+
+
 
 

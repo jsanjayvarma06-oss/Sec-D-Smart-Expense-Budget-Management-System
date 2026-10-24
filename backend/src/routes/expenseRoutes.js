@@ -11,6 +11,7 @@ import {
   listExpenses,
   updateExpense,
   deleteExpense,
+dismissExpenseFlag,
 } from '../services/expenseService.js';
 import { HttpError } from '../utils/httpError.js';
 
@@ -89,6 +90,23 @@ export function expenseRoutes() {
       next(err);
     }
   });
+
+  // Dismiss an unusual-spending flag without deleting the expense.
+  router.patch('/:id/review', async (req, res, next) => {
+    try {
+      const expenseId = validateExpenseId(req.params.id);
+      const expense = await dismissExpenseFlag(req.user.id, expenseId);
+
+      if (!expense) {
+        throw new HttpError(404, 'Flagged expense not found');
+      }
+
+      res.json({ expense });
+    } catch (err) {
+      next(err);
+    }
+  });
+
 
   return router;
 }
