@@ -1,10 +1,13 @@
+
 import pg from 'pg';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
-// NUMERIC comes back from pg as a string. Keep it that way in the data layer so
-// money is never rounded through floating point; services convert explicitly.
+// Keep PostgreSQL DATE values as YYYY-MM-DD strings.
+// This avoids timezone shifts when dates are returned through the API.
+pg.types.setTypeParser(1082, (value) => value);
 
+// NUMERIC remains a string to avoid floating-point rounding of money.
 export const pool = new pg.Pool({
   connectionString: config.databaseUrl,
   max: 10,
