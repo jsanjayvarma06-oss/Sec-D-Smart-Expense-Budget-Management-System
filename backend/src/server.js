@@ -3,7 +3,12 @@ import { config } from './config.js';
 import { pool } from './db/pool.js';
 import { logger } from './utils/logger.js';
 
-const server = createApp().listen(config.port, () => {
+const app = createApp({
+  apiRateLimit: config.rateLimit.api,
+  loginRateLimit: config.rateLimit.login,
+});
+
+const server = app.listen(config.port, () => {
   logger.info('API listening', { port: config.port, env: config.env });
 });
 
