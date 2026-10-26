@@ -5,7 +5,9 @@ import {
   generateDueRecurringExpenses,
   listRecurringExpenses,
   createRecurringExpense,
+  markRecurringExpensePaid,
 } from '../services/recurringExpenseService.js';
+import { isWithinDaysOfToday, parseClientToday } from '../utils/clientDate.js';
 import { HttpError } from '../utils/httpError.js';
 
 const dateSchema = z.string()
@@ -20,7 +22,11 @@ const createRecurringExpenseSchema = z.object({
   category_id: z.string().uuid(),
   amount: z.coerce.number().finite().positive().max(9999999999.99),
   cycle: z.enum(['weekly', 'monthly']),
-  start_date: dateSchema,
+  // A start date decades away would generate thousands of entries at once.
+  start_date: dateSchema.refine(
+    (value) => isWithinDaysOfToday(value, 366),
+    'First due date must be within a year of today',
+  ),
   note: z.string().trim().max(255).nullable().optional()
     .transform((value) => value || null),
 });
@@ -67,20 +73,8 @@ export function recurringExpenseRoutes() {
 
   router.post('/generate-due', async (req, res, next) => {
     try {
-      const parsed = dateSchema.safeParse(req.body?.today);
-
-      if (!parsed.success) {
-        throw new HttpError(
-          400,
-          'A valid today date is required (YYYY-MM-DD)',
-          { code: 'VALIDATION' },
-        );
-      }
-
-      const expenses = await generateDueRecurringExpenses(
-        req.user.id,
-        parsed.data,
-      );
+      const today = parseClientToday(req.body?.today);
+      const expenses = await generateDueRecurringExpenses(req.user.id, today);
 
       res.json({
         generated_count: expenses.length,
@@ -105,9 +99,6 @@ export function recurringExpenseRoutes() {
           { code: 'VALIDATION' },
         );
       }
-
-      const { markRecurringExpensePaid } =
-        await import('../services/recurringExpenseService.js');
 
       const result = await markRecurringExpensePaid(
         req.user.id,

@@ -8,9 +8,13 @@ import { logger } from '../utils/logger.js';
 pg.types.setTypeParser(1082, (value) => value);
 
 // NUMERIC remains a string to avoid floating-point rounding of money.
+// If every connection is busy, a request waits at most 5 seconds and then fails
+// with a 503 instead of queueing forever.
 export const pool = new pg.Pool({
   connectionString: config.databaseUrl,
   max: 10,
+  connectionTimeoutMillis: 5000,
+  ...(config.databaseSsl && { ssl: { rejectUnauthorized: true } }),
 });
 
 pool.on('error', (err) => {

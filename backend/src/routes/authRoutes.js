@@ -7,7 +7,7 @@ import {
   sessionCookieOptions,
 } from '../middleware/requireAuth.js';
 import { destroySession, createSession } from '../services/sessionService.js';
-import { hashPassword, verifyPassword } from '../services/passwordService.js';
+import { hashPassword, verifyAgainstDummyHash, verifyPassword } from '../services/passwordService.js';
 import { isLocked, recordFailedLogin, resetFailedLogins } from '../services/loginProtection.js';
 import { registerSchema, loginSchema } from '../services/authSchemas.js';
 import { query } from '../db/pool.js';
@@ -54,8 +54,10 @@ export function authRoutes() {
 
       const user = rows[0];
 
-      // Use a generic error so the response does not reveal whether an email exists.
+      // Use a generic error and the same bcrypt work, so neither the message nor
+      // the response time reveals whether an email exists.
       if (!user) {
+        await verifyAgainstDummyHash(password);
         throw new HttpError(401, 'Invalid email or password', {
           code: 'INVALID_CREDENTIALS',
         });

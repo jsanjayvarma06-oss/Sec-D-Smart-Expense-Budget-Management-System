@@ -23,6 +23,11 @@ export function errorHandler(err, req, res, _next) {
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json({ error: 'Request body is not valid JSON' });
   }
+  // pg's message when no pool connection frees up within connectionTimeoutMillis.
+  if (/timeout exceeded when trying to connect/i.test(err.message)) {
+    logger.warn('Database pool busy', { method: req.method, path: req.originalUrl });
+    return res.status(503).json({ error: 'The server is busy. Please try again in a moment.' });
+  }
 
   logger.error('Unhandled error', {
     method: req.method,

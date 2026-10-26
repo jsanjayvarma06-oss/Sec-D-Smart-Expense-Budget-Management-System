@@ -14,6 +14,10 @@ useTestDatabase();
 
 const app = createApp();
 
+// Dates relative to the server's today: the API only accepts a "today" within a
+// day of the real date.
+const day = (offset) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+
 async function createCategory(userId) {
   const { rows } = await query(
     `INSERT INTO categories (user_id, name)
@@ -29,9 +33,9 @@ async function createRecurringExpense(userId, categoryId) {
   const { rows } = await query(
     `INSERT INTO recurring_expenses
        (user_id, category_id, amount, cycle, start_date, next_due_date, note)
-     VALUES ($1, $2, 250, 'weekly', '2026-10-01', '2026-10-01', 'Test recurring expense')
+     VALUES ($1, $2, 250, 'weekly', $3::date, $3::date, 'Test recurring expense')
      RETURNING id`,
-    [userId, categoryId],
+    [userId, categoryId, day(-14)],
   );
 
   return rows[0].id;
@@ -41,7 +45,7 @@ describe('Recurring expense API', () => {
   test('requires authentication', async () => {
     await request(app)
       .post('/api/recurring-expenses/generate-due')
-      .send({ today: '2026-10-23' })
+      .send({ today: day(0) })
       .expect(401);
   });
 
@@ -85,15 +89,15 @@ describe('Recurring expense API', () => {
         category_id: categoryId,
         amount: 500,
         cycle: 'monthly',
-        start_date: '2026-10-25',
+        start_date: day(0),
         note: 'Monthly subscription',
       })
       .expect(201);
 
     assert.equal(response.body.recurringExpense.amount, '500.00');
     assert.equal(response.body.recurringExpense.cycle, 'monthly');
-    assert.equal(response.body.recurringExpense.start_date, '2026-10-25');
-    assert.equal(response.body.recurringExpense.next_due_date, '2026-10-25');
+    assert.equal(response.body.recurringExpense.start_date, day(0));
+    assert.equal(response.body.recurringExpense.next_due_date, day(0));
   });
 
   test('rejects invalid recurring expense data', async () => {
@@ -120,7 +124,7 @@ describe('Recurring expense API', () => {
         category_id: '00000000-0000-4000-8000-000000000001',
         amount: 500,
         cycle: 'monthly',
-        start_date: '2026-10-25',
+        start_date: day(0),
       })
       .expect(401);
   });
@@ -134,7 +138,7 @@ describe('Recurring expense API', () => {
     const response = await request(app)
       .post('/api/recurring-expenses/generate-due')
       .set('Cookie', cookie)
-      .send({ today: '2026-10-15' })
+      .send({ today: day(0) })
       .expect(200);
 
     assert.equal(response.body.generated_count, 3);
@@ -151,13 +155,13 @@ describe('Recurring expense API', () => {
     const firstResponse = await request(app)
       .post('/api/recurring-expenses/generate-due')
       .set('Cookie', cookie)
-      .send({ today: '2026-10-15' })
+      .send({ today: day(0) })
       .expect(200);
 
     const secondResponse = await request(app)
       .post('/api/recurring-expenses/generate-due')
       .set('Cookie', cookie)
-      .send({ today: '2026-10-15' })
+      .send({ today: day(0) })
       .expect(200);
 
     assert.equal(firstResponse.body.generated_count, 3);

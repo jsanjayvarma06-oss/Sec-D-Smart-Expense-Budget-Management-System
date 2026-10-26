@@ -90,6 +90,14 @@ export function categoryRoutes() {
 
       res.status(204).end();
     } catch (err) {
+      // 23503: expenses, budgets or recurring payments still point at it.
+      if (err.code === '23503') {
+        return next(new HttpError(
+          409,
+          'This category is used by expenses, budgets or recurring payments. Move or delete those first.',
+          { code: 'CATEGORY_IN_USE' },
+        ));
+      }
       next(err);
     }
   });
