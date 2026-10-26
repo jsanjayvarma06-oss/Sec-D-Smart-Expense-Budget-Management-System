@@ -1,7 +1,7 @@
 // Minimal JSON logger. Anything that looks like a credential or an amount is
 // replaced before it is written, so logs never expose them (SR10).
 
-const SENSITIVE_KEYS = /pass(word)?|token|secret|cookie|authorization|amount|hash/i;
+const SENSITIVE_KEYS = /pass(word)?|token|secret|cookie|authorization|amount|hash|email|note|merchant|detail/i;
 
 function redact(value, depth = 0) {
   if (value === null || typeof value !== 'object' || depth > 4) return value;

@@ -20,6 +20,9 @@ export const config = {
   isProduction,
   port: int('PORT', 4000),
   databaseUrl: process.env.DATABASE_URL,
+  // DATABASE_SSL=require encrypts the API-to-database connection and checks the
+  // server's certificate (SR06). Hosted PostgreSQL needs it; a local one doesn't.
+  databaseSsl: process.env.DATABASE_SSL === 'require',
   corsOrigins: (process.env.CORS_ORIGIN || 'http://localhost:5173')
     .split(',')
     .map((origin) => origin.trim())

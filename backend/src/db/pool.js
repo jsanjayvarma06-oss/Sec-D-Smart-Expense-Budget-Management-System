@@ -14,6 +14,7 @@ export const pool = new pg.Pool({
   connectionString: config.databaseUrl,
   max: 10,
   connectionTimeoutMillis: 5000,
+  ...(config.databaseSsl && { ssl: { rejectUnauthorized: true } }),
 });
 
 pool.on('error', (err) => {

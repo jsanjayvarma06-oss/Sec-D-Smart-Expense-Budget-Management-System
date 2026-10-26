@@ -18,6 +18,8 @@ const emptyExpense = {
   note: '',
 };
 
+const SESSION_EXPIRED_EVENT = 'smart-expense:session-expired';
+
 async function apiRequest(url, options = {}) {
   const response = await fetch(url, {
     credentials: 'include',
@@ -30,6 +32,13 @@ async function apiRequest(url, options = {}) {
 
   if (!response.ok) {
     const result = await response.json().catch(() => ({}));
+
+    // UC-01 alternate flow 9a: when the server says the session has ended
+    // (idle timeout, expiry or logout elsewhere), send the user back to login.
+    if (response.status === 401 && result.code === 'UNAUTHENTICATED' && url !== '/api/auth/me') {
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    }
+
     throw new Error(
       result.message || result.error || `Request failed (${response.status})`,
     );
@@ -47,14 +56,14 @@ function formatCurrency(amount) {
   }).format(Number(amount) || 0);
 }
 
-function AuthScreen({ onLogin }) {
+function AuthScreen({ onLogin, notice = '' }) {
   const [mode, setMode] = useState('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState(notice);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -1285,10 +1294,22 @@ export default function App() {
   const [apiStatus, setApiStatus] = useState('checking');
   const [user, setUser] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [authNotice, setAuthNotice] = useState('');
 
   const loadCurrentUser = useCallback(async () => {
     const result = await apiRequest('/api/auth/me');
+    setAuthNotice('');
     setUser(result.user);
+  }, []);
+
+  useEffect(() => {
+    function handleSessionExpired() {
+      setAuthNotice('Your session has expired. Please log in again.');
+      setUser(null);
+    }
+
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
   }, []);
 
   useEffect(() => {
@@ -1333,7 +1354,7 @@ export default function App() {
   if (!user) {
     return (
       <>
-        <AuthScreen onLogin={loadCurrentUser} />
+        <AuthScreen key={authNotice} onLogin={loadCurrentUser} notice={authNotice} />
         <p className="auth-api-status">
           API:{' '}
           <strong className={`status status-${apiStatus}`}>
