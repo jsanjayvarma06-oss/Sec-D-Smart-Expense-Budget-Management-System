@@ -14,7 +14,9 @@
     "db:restore": "node --env-file-if-exists=.env scripts/restore.js",
     "db:crash-drill": "node --env-file-if-exists=.env scripts/forcedShutdownDrill.js",
     "mail:latest": "node --env-file-if-exists=.env scripts/latestEmail.js",
-    "test:plan": "node --env-file-if-exists=.env.test --test --test-concurrency=1 \"test/plan/*.test.js\"; node scripts/renderTestResults.js"
+    "test:plan": "node --env-file-if-exists=.env.test --test --test-concurrency=1 \"test/plan/*.test.js\"; node scripts/renderTestResults.js",
+    "load:seed": "node scripts/load/seed.js",
+    "load:run": "node scripts/load/run.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

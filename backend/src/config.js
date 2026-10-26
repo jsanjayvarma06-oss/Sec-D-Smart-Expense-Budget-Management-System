@@ -38,6 +38,11 @@ export const config = {
     maxFailedAttempts: int('LOGIN_MAX_FAILED_ATTEMPTS', 5),
     lockoutMinutes: int('LOGIN_LOCKOUT_MINUTES', 15),
   },
+  // Requests per 15 minutes per source (SR09). Raised only for load testing.
+  rateLimit: {
+    api: int('API_RATE_LIMIT', 300),
+    login: int('LOGIN_RATE_LIMIT', 20),
+  },
   passwordReset: {
     // Where the reset link in the email points (the web app).
     appUrl: (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, ''),
