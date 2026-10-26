@@ -57,6 +57,7 @@ export async function createExpense(userId, expense) {
       userId,
       expense.amount,
       categoryId,
+      db,
     );
 
     const { rows } = await db.query(

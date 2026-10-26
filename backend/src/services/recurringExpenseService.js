@@ -1,6 +1,9 @@
 
 import { withUser } from '../db/userScope.js';
 
+// About a year of weekly payments; keeps one request short.
+export const MAX_CYCLES_PER_RUN = 60;
+
 function toDateString(value) {
   return value instanceof Date
     ? value.toISOString().slice(0, 10)
@@ -56,9 +59,13 @@ export async function generateDueRecurringExpenses(userId, today) {
 
     for (const recurring of recurringExpenses) {
       let dueDate = toDateString(recurring.next_due_date);
+      let cycles = 0;
 
-      // Generate every overdue cycle, not just the latest one.
-      while (dueDate <= today) {
+      // Generate every overdue cycle, not just the latest one, up to a cap per
+      // run. next_due_date is saved below, so the next run carries on from
+      // wherever this one stopped.
+      while (dueDate <= today && cycles < MAX_CYCLES_PER_RUN) {
+        cycles += 1;
         const { rows } = await db.query(
           `INSERT INTO expenses
              (user_id, category_id, amount, spent_on, note,

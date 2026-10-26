@@ -16,7 +16,11 @@ useTestDatabase();
 
 const app = createApp();
 
-async function createRecurringExpense(userId, dueDate = '2026-10-25') {
+// Dates relative to the server's today: the reminders route only accepts a
+// "today" within a day of the real date.
+const day = (offset) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+
+async function createRecurringExpense(userId, dueDate = day(1)) {
   const { rows: categories } = await query(
     `INSERT INTO categories (user_id, name)
      VALUES ($1, $2)
@@ -166,12 +170,12 @@ describe('Notification API', () => {
     const user = await createUser();
     const cookie = await loginAs(user);
 
-    await createRecurringExpense(user.id, '2026-10-25');
+    await createRecurringExpense(user.id, day(1));
 
     const response = await request(app)
       .post('/api/notifications/payment-reminders')
       .set('Cookie', cookie)
-      .send({ today: '2026-10-24' })
+      .send({ today: day(0) })
       .expect(200);
 
     assert.equal(response.body.created_count, 1);
@@ -182,18 +186,18 @@ describe('Notification API', () => {
     const user = await createUser();
     const cookie = await loginAs(user);
 
-    await createRecurringExpense(user.id, '2026-10-25');
+    await createRecurringExpense(user.id, day(1));
 
     const first = await request(app)
       .post('/api/notifications/payment-reminders')
       .set('Cookie', cookie)
-      .send({ today: '2026-10-24' })
+      .send({ today: day(0) })
       .expect(200);
 
     const second = await request(app)
       .post('/api/notifications/payment-reminders')
       .set('Cookie', cookie)
-      .send({ today: '2026-10-24' })
+      .send({ today: day(0) })
       .expect(200);
 
     assert.equal(first.body.created_count, 1);
@@ -204,12 +208,12 @@ describe('Notification API', () => {
     const user = await createUser();
     const cookie = await loginAs(user);
 
-    await createRecurringExpense(user.id, '2026-10-30');
+    await createRecurringExpense(user.id, day(6));
 
     const response = await request(app)
       .post('/api/notifications/payment-reminders')
       .set('Cookie', cookie)
-      .send({ today: '2026-10-24' })
+      .send({ today: day(0) })
       .expect(200);
 
     assert.equal(response.body.created_count, 0);
@@ -218,23 +222,23 @@ describe('Notification API', () => {
   test('does not create a reminder after the payment cycle is marked paid', async () => {
     const user = await createUser();
     const cookie = await loginAs(user);
-    const recurringId = await createRecurringExpense(user.id, '2026-10-25');
+    const recurringId = await createRecurringExpense(user.id, day(1));
 
-    await generateDueRecurringExpenses(user.id, '2026-10-25');
+    await generateDueRecurringExpenses(user.id, day(1));
 
     const paid = await markRecurringExpensePaid(
       user.id,
       recurringId,
-      '2026-10-25',
+      day(1),
     );
 
     assert.ok(paid);
-    assert.equal(paid.last_paid_due_date, '2026-10-25');
+    assert.equal(paid.last_paid_due_date, day(1));
 
     const response = await request(app)
       .post('/api/notifications/payment-reminders')
       .set('Cookie', cookie)
-      .send({ today: '2026-10-24' })
+      .send({ today: day(0) })
       .expect(200);
 
     assert.equal(response.body.created_count, 0);

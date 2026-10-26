@@ -16,9 +16,11 @@ function formatBudget(row) {
   };
 }
 
+// Amounts are added and compared in SQL NUMERIC, never as JavaScript numbers,
+// so a total like 1000.10 + 0.20 is exactly 1000.30 (NFR04).
 async function validateOverallBudget(db, userId, budgetId, amount) {
   const { rows } = await db.query(
-    `SELECT COALESCE(SUM(amount), 0) AS category_total
+    `SELECT COALESCE(SUM(amount), 0) <= $3::numeric AS fits
      FROM budgets
      WHERE user_id = $1
        AND category_id IS NOT NULL
@@ -27,10 +29,10 @@ async function validateOverallBudget(db, userId, budgetId, amount) {
          FROM budgets
          WHERE id = $2 AND user_id = $1
        )`,
-    [userId, budgetId],
+    [userId, budgetId, amount],
   );
 
-  return Number(rows[0].category_total) <= Number(amount);
+  return rows[0].fits;
 }
 
 async function validateCategoryBudget(
@@ -57,19 +59,16 @@ async function validateCategoryBudget(
   }
 
   const { rows: categoryRows } = await db.query(
-    `SELECT COALESCE(SUM(amount), 0) AS category_total
+    `SELECT COALESCE(SUM(amount), 0) + $4::numeric <= $5::numeric AS fits
      FROM budgets
      WHERE user_id = $1
        AND month = $2::date
        AND category_id IS NOT NULL
        AND ($3::uuid IS NULL OR id <> $3::uuid)`,
-    [userId, normalizeMonth(month), excludeBudgetId],
+    [userId, normalizeMonth(month), excludeBudgetId, amount, overallRows[0].amount],
   );
 
-  const total =
-    Number(categoryRows[0].category_total) + Number(amount);
-
-  return total <= Number(overallRows[0].amount);
+  return categoryRows[0].fits;
 }
 
 export async function listBudgets(userId, month) {
@@ -128,18 +127,15 @@ export async function createBudget(userId, budget) {
       }
     } else {
       const { rows: categoryRows } = await db.query(
-        `SELECT COALESCE(SUM(amount), 0) AS category_total
+        `SELECT COALESCE(SUM(amount), 0) > $3::numeric AS exceeds
          FROM budgets
          WHERE user_id = $1
            AND month = $2::date
            AND category_id IS NOT NULL`,
-        [userId, normalizeMonth(budget.month)],
+        [userId, normalizeMonth(budget.month), budget.amount],
       );
 
-      if (
-        Number(categoryRows[0].category_total) >
-        Number(budget.amount)
-      ) {
+      if (categoryRows[0].exceeds) {
         return { error: 'CATEGORY_BUDGETS_EXCEED_OVERALL' };
       }
     }
@@ -258,7 +254,9 @@ export async function getRemainingBudget(userId, month) {
          b.category_id,
          c.name AS category_name,
          b.amount AS budget_amount,
-         COALESCE(SUM(e.amount), 0) AS spent_amount
+         COALESCE(SUM(e.amount), 0) AS spent_amount,
+         b.amount - COALESCE(SUM(e.amount), 0) AS remaining_amount,
+         COALESCE(SUM(e.amount), 0) > b.amount AS exceeded
        FROM budgets b
        LEFT JOIN categories c
          ON c.id = b.category_id
@@ -282,20 +280,17 @@ export async function getRemainingBudget(userId, month) {
       [userId, normalizeMonth(month)],
     );
 
-    return rows.map((row) => {
-      const budgetAmount = Number(row.budget_amount);
-      const spentAmount = Number(row.spent_amount);
-
-      return {
-        budget_id: row.budget_id,
-        month: formatBudget(row).month,
-        category_id: row.category_id,
-        category_name: row.category_name,
-        budget_amount: budgetAmount,
-        spent_amount: spentAmount,
-        remaining_amount: budgetAmount - spentAmount,
-        exceeded: spentAmount > budgetAmount,
-      };
-    });
+    // The subtraction happened in SQL, so converting the exact NUMERIC results
+    // to numbers here cannot introduce rounding like 400.19999999999993.
+    return rows.map((row) => ({
+      budget_id: row.budget_id,
+      month: formatBudget(row).month,
+      category_id: row.category_id,
+      category_name: row.category_name,
+      budget_amount: Number(row.budget_amount),
+      spent_amount: Number(row.spent_amount),
+      remaining_amount: Number(row.remaining_amount),
+      exceeded: row.exceeded,
+    }));
   });
 }

@@ -6,6 +6,7 @@ import {
   markNotificationRead,
   createPaymentReminders,
 } from '../services/notificationService.js';
+import { parseClientToday } from '../utils/clientDate.js';
 import { HttpError } from '../utils/httpError.js';
 
 const notificationIdSchema = z.string().uuid();
@@ -65,26 +66,8 @@ export function notificationRoutes() {
   // Generate reminders for recurring payments due soon.
   router.post('/payment-reminders', async (req, res, next) => {
     try {
-      const dateSchema = z.string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/)
-        .refine((value) => {
-          const date = new Date(`${value}T00:00:00Z`);
-          return !Number.isNaN(date.getTime())
-            && date.toISOString().slice(0, 10) === value;
-        });
-
-      const parsed = dateSchema.safeParse(req.body?.today);
-
-      if (!parsed.success) {
-        throw new HttpError(400, 'A valid today date is required (YYYY-MM-DD)', {
-          code: 'VALIDATION',
-        });
-      }
-
-      const notifications = await createPaymentReminders(
-        req.user.id,
-        parsed.data,
-      );
+      const today = parseClientToday(req.body?.today);
+      const notifications = await createPaymentReminders(req.user.id, today);
 
       res.json({
         created_count: notifications.length,
