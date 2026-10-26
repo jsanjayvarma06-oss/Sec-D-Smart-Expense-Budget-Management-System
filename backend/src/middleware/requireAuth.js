@@ -22,6 +22,8 @@ const PUBLIC_ROUTES = new Set([
   'GET /api/health',
   'POST /api/auth/register',
   'POST /api/auth/login',
+  'POST /api/auth/forgot-password',
+  'POST /api/auth/reset-password',
 ]);
 
 // Mounted once on /api by the Application Controller, so a new endpoint is

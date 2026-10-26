@@ -26,6 +26,7 @@ import { analyticsRoutes } from './routes/analyticsRoutes.js';
 export function createApp({
   loginRateLimit = 20,
   apiRateLimit = 300,
+  passwordResetRateLimit = 5,
 } = {}) {
   const app = express();
 
@@ -72,6 +73,17 @@ app.use('/api/forecast', forecastRoutes());
       name: 'login',
       windowMinutes: 15,
       limit: loginRateLimit,
+    }),
+  );
+
+  // Reset emails are limited per source so the form can't be used to flood
+  // someone's inbox or guess reset links (SR09).
+  app.use(
+    ['/api/auth/forgot-password', '/api/auth/reset-password'],
+    createRateLimiter({
+      name: 'password-reset',
+      windowMinutes: 15,
+      limit: passwordResetRateLimit,
     }),
   );
 

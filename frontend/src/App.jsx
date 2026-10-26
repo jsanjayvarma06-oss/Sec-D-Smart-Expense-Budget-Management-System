@@ -65,6 +65,12 @@ function AuthScreen({ onLogin, notice = '' }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState(notice);
 
+  function switchMode(nextMode) {
+    setMode(nextMode);
+    setError('');
+    setMessage('');
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     setError('');
@@ -72,7 +78,13 @@ function AuthScreen({ onLogin, notice = '' }) {
     setBusy(true);
 
     try {
-      if (mode === 'register') {
+      if (mode === 'forgot') {
+        const result = await apiRequest('/api/auth/forgot-password', {
+          method: 'POST',
+          body: JSON.stringify({ email }),
+        });
+        setMessage(result.message);
+      } else if (mode === 'register') {
         await apiRequest('/api/auth/register', {
           method: 'POST',
           body: JSON.stringify({ name, email, password }),
@@ -102,9 +114,9 @@ function AuthScreen({ onLogin, notice = '' }) {
         <p className="eyebrow">PERSONAL FINANCE</p>
         <h1>Smart Expense &amp; Budget</h1>
         <p className="muted">
-          {mode === 'login'
-            ? 'Log in to manage your finances.'
-            : 'Create an account to manage your budget.'}
+          {mode === 'login' && 'Log in to manage your finances.'}
+          {mode === 'register' && 'Create an account to manage your budget.'}
+          {mode === 'forgot' && "Enter your email and we'll send you a link to reset your password."}
         </p>
 
         <div className="auth-tabs">
@@ -159,20 +171,22 @@ function AuthScreen({ onLogin, notice = '' }) {
             />
           </label>
 
-          <label>
-            Password
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete={
-                mode === 'login' ? 'current-password' : 'new-password'
-              }
-              minLength={8}
-              maxLength={72}
-              required
-            />
-          </label>
+          {mode !== 'forgot' && (
+            <label>
+              Password
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete={
+                  mode === 'login' ? 'current-password' : 'new-password'
+                }
+                minLength={8}
+                maxLength={72}
+                required
+              />
+            </label>
+          )}
 
           {error && (
             <p className="error-message" role="alert">
@@ -187,17 +201,108 @@ function AuthScreen({ onLogin, notice = '' }) {
           )}
 
           <button type="submit" disabled={busy}>
-            {busy
-              ? 'Please wait…'
-              : mode === 'login'
-                ? 'Log in'
-                : 'Create account'}
+            {busy && 'Please wait…'}
+            {!busy && mode === 'login' && 'Log in'}
+            {!busy && mode === 'register' && 'Create account'}
+            {!busy && mode === 'forgot' && 'Send reset link'}
+          </button>
+
+          {mode === 'login' && (
+            <button type="button" className="link-button" onClick={() => switchMode('forgot')}>
+              Forgot your password?
+            </button>
+          )}
+          {mode === 'forgot' && (
+            <button type="button" className="link-button" onClick={() => switchMode('login')}>
+              Back to log in
+            </button>
+          )}
+        </form>
+      </section>
+    </main>
+  );
+}
+
+// Opened from the link in a password reset email (/reset-password?token=…).
+function ResetPasswordScreen({ token, onDone }) {
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError('');
+    if (password !== confirm) {
+      setError('The two passwords do not match.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const result = await apiRequest('/api/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ token, password }),
+      });
+      onDone(result.message);
+    } catch (err) {
+      setError(err.message || 'Could not reset the password.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="auth-page">
+      <section className="auth-card">
+        <p className="eyebrow">PERSONAL FINANCE</p>
+        <h1>Choose a new password</h1>
+        <p className="muted">After this you'll be logged out everywhere and can log in with the new password.</p>
+
+        <form onSubmit={handleSubmit} className="auth-form">
+          <label>
+            New password
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+              maxLength={72}
+              required
+            />
+          </label>
+          <label>
+            Repeat new password
+            <input
+              type="password"
+              value={confirm}
+              onChange={(event) => setConfirm(event.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+              maxLength={72}
+              required
+            />
+          </label>
+
+          {error && (
+            <p className="error-message" role="alert">
+              {error}
+            </p>
+          )}
+
+          <button type="submit" disabled={busy}>
+            {busy ? 'Please wait…' : 'Change password'}
+          </button>
+          <button type="button" className="link-button" onClick={() => onDone('')}>
+            Back to log in
           </button>
         </form>
       </section>
     </main>
   );
 }
+
 function Dashboard({ user, onLogout }) {
   const [month, setMonth] = useState(currentMonth);
   const [budgets, setBudgets] = useState([]);
@@ -1295,6 +1400,17 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [authNotice, setAuthNotice] = useState('');
+  const [resetToken, setResetToken] = useState(() => (
+    window.location.pathname === '/reset-password'
+      ? new URLSearchParams(window.location.search).get('token') || ''
+      : ''
+  ));
+
+  function finishReset(message) {
+    window.history.replaceState(null, '', '/');
+    setResetToken('');
+    setAuthNotice(message);
+  }
 
   const loadCurrentUser = useCallback(async () => {
     const result = await apiRequest('/api/auth/me');
@@ -1341,6 +1457,10 @@ export default function App() {
 
   async function handleLogoutComplete() {
     setUser(null);
+  }
+
+  if (resetToken) {
+    return <ResetPasswordScreen token={resetToken} onDone={finishReset} />;
   }
 
   if (checkingSession) {

@@ -155,7 +155,7 @@ describe('row-level security in the database', () => {
       WHERE n.nspname = 'public'
         AND c.relkind = 'r'
         AND col.column_name = 'user_id'
-        AND c.relname NOT IN ('sessions')
+        AND c.relname NOT IN ('sessions', 'password_reset_tokens')  -- auth-only, used before login
     `);
     assert.ok(rows.length >= 7);
     for (const row of rows) {

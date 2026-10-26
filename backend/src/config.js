@@ -38,4 +38,14 @@ export const config = {
     maxFailedAttempts: int('LOGIN_MAX_FAILED_ATTEMPTS', 5),
     lockoutMinutes: int('LOGIN_LOCKOUT_MINUTES', 15),
   },
+  passwordReset: {
+    // Where the reset link in the email points (the web app).
+    appUrl: (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, ''),
+    expiryMinutes: int('PASSWORD_RESET_MINUTES', 30),
+  },
+  mail: {
+    // e.g. smtps://user:pass@smtp.example.com. Unset: emails go to mail_outbox.
+    smtpUrl: process.env.SMTP_URL || null,
+    from: process.env.MAIL_FROM || 'Smart Expense <no-reply@localhost>',
+  },
 };

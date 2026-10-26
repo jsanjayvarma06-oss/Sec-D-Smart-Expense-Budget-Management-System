@@ -9,9 +9,16 @@ import {
 import { destroySession, createSession } from '../services/sessionService.js';
 import { hashPassword, verifyAgainstDummyHash, verifyPassword } from '../services/passwordService.js';
 import { isLocked, recordFailedLogin, resetFailedLogins } from '../services/loginProtection.js';
-import { registerSchema, loginSchema } from '../services/authSchemas.js';
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  registerSchema,
+  resetPasswordSchema,
+} from '../services/authSchemas.js';
+import { requestPasswordReset, resetPassword } from '../services/passwordResetService.js';
 import { query } from '../db/pool.js';
 import { HttpError } from '../utils/httpError.js';
+import { logger } from '../utils/logger.js';
 
 export function authRoutes() {
   const router = Router();
@@ -105,6 +112,32 @@ export function authRoutes() {
       await destroySession(req.sessionToken);
       clearSessionCookie(res);
       res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Password recovery, step 1. The reply is sent before any lookup happens, so
+  // neither its wording nor its timing reveals whether the email has an account.
+  router.post('/forgot-password', validate(forgotPasswordSchema), (req, res) => {
+    res.status(202).json({
+      message: 'If an account exists for that email, we have sent a link to reset the password.',
+    });
+    requestPasswordReset(req.body.email).catch((err) => {
+      logger.error('Password reset request failed', { error: err.message });
+    });
+  });
+
+  // Password recovery, step 2: the link from the email plus a new password.
+  router.post('/reset-password', validate(resetPasswordSchema), async (req, res, next) => {
+    try {
+      const done = await resetPassword(req.body.token, req.body.password);
+      if (!done) {
+        throw new HttpError(400, 'This reset link is invalid or has expired. Please request a new one.', {
+          code: 'INVALID_RESET_TOKEN',
+        });
+      }
+      res.json({ message: 'Your password has been changed. Please log in with your new password.' });
     } catch (err) {
       next(err);
     }

@@ -21,6 +21,16 @@ export const registerSchema = z.object({
     ),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: registerSchema.shape.email,
+});
+
+// A new password follows the same rule as registration.
+export const resetPasswordSchema = z.object({
+  token: z.string().min(20, 'This reset link is invalid or has expired').max(200),
+  password: registerSchema.shape.password,
+});
+
 export const loginSchema = z.object({
   email: z.string()
     .trim()

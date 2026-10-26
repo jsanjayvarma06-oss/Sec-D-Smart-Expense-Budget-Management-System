@@ -429,3 +429,16 @@ h3 {
     padding: 24px;
   }
 }
+
+.link-button {
+  justify-self: center;
+  padding: 4px 8px;
+  background: transparent;
+  color: #245bdb;
+  font-weight: 600;
+}
+
+.link-button:hover {
+  filter: none;
+  text-decoration: underline;
+}
