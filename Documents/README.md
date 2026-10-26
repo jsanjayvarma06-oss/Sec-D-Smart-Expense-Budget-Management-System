@@ -22,10 +22,27 @@ separate category rather than folded into the non-functional list.
 
 ---
 
-## Repository Contents
+## Documents in this folder
 
 | File | What it is |
 |---|---|
+| `01_SRS_Document.pdf` | 20 functional, 10 non-functional and 10 security requirements, each with priority, acceptance criteria and rationale, plus a user story to requirement to use case traceability table |
+| `02_UseCase_Diagram.pdf` | UML use case diagram with all actors, use cases and include/extend relationships |
+| `Flow.png` | Image version of the use case diagram |
+| `03_UseCase_Flows.pdf` | Flow specifications for all ten use cases, UC-01 to UC-10, each with goal, actors, main flow and alternate flows |
+| `04_Test_Plan.pdf` | 50 test cases across unit, integration and system testing |
+| `05_Secure Architecture Design.pdf` | Assets, trust boundaries, access policy and threat map for SR01–SR10 |
+| `Architecture_Justification.pdf` | Why a layered architecture was chosen |
+| `UML_Component_Diagram.png` | Components and interfaces of the layered design |
+| `06_Backup_and_Recovery_Strategy.md` | Backup frequency and retention, recovery procedures and forced-shutdown results (NFR10) |
+| `07_Test_Results.md` | Actual results for all 50 test-plan cases and the NFR04 calculation check, generated from an automated run |
+| `08_Performance_Results.md` | Dashboard timing (NFR01) and load test with 1,000 users and 100,000 transactions (NFR05) |
+| `09_Decisions_and_Deviations.md` | Agreed thresholds (for sign-off), SRS updates, and every difference between the build and the SRS, SAD and test plan |
+| `10_API_Reference.md` | Every API endpoint with its inputs, rules and limits |
+| `Sprint1_Demo_Script.md`, `Sprint1_Demo.mp4` | Sprint 1 demo |
+| `Sprint2_Demo_Script.md` | Script for the Sprint 2 demo video |
+
+---|---|
 | `01_Requirements_Table.docx` | 20 functional, 10 non-functional and 10 security requirements, each with priority, acceptance criteria, rationale and review comments. Ends with a user story to requirement to use case traceability table. |
 | `02_UseCase_Diagram.pdf` | UML use case diagram with all actors, use cases and stereotype relationships |
 | `usecase_diagram.png` | Image version of the same diagram, for embedding in reports or slides |
@@ -101,16 +118,17 @@ as fixed.
 
 Test cases are grouped into six modules and cover both valid and invalid inputs.
 
-The **Actual Result** and **Test Result** columns are intentionally left blank. They are to be
-filled in by hand while running each case. Test cases covering features that have not been
-implemented yet should be removed rather than marked as passing.
+Every case is now automated (`backend/test/plan/`). `npm run test:plan -w backend` runs them
+and fills in the Actual Result and Test Result columns in `07_Test_Results.md` from the run.
+Cases for features that are not built yet are listed as not run, never as passing.
 
 ---
 
 ## Working with the Diagram
 
 1. Open [app.diagrams.net](https://app.diagrams.net)
-2. **File → Open From → Device**, then select `smart_expense_usecase.drawio`
+2. **File → Open From → Device**, then select the diagram's `.drawio` source (kept outside this
+   repository; `Flow.png` and `02_UseCase_Diagram.pdf` are its exports)
 3. Edit as needed, then **File → Export as → PDF**
 
 Note on notation: `«include»` arrows point from the base use case to the included one,
@@ -122,10 +140,9 @@ backwards is the most common mistake in use case diagrams.
 ## Known Gaps
 
 - **UC-08 Run What-If Simulation** has no include or extend relationship, though it
-  arguably should reuse Forecast Monthly Expenditure, since a simulation runs the same
-  prediction with a hypothetical expense added.
-- Several numeric thresholds in the acceptance criteria (dashboard load time, forecast
-  error margin, alert threshold percentage, session timeout) are placeholders and need
-  to be agreed on.
-- FR07 does not say whether category budgets summing above the monthly budget should be
-  blocked or merely flagged.
+  arguably should reuse Forecast Monthly Expenditure. The build does reuse the forecast.
+- The placeholder thresholds now have proposed values in `09_Decisions_and_Deviations.md`,
+  waiting for team sign-off.
+- FR07 is decided: category budgets that add up to more than the monthly budget are refused.
+- Everything else where the build differs from these documents is listed, with owners, in
+  `09_Decisions_and_Deviations.md`.

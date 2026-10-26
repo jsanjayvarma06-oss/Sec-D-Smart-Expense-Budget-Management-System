@@ -7,7 +7,10 @@
   `feature/expense-crud`, `fix/budget-rounding`, `docs/update-srs`.
 - Open a pull request and fill in the template. At least one teammate reviews
   before merging; CI must be green.
-- Mention the project item in the PR description so the board stays current.
+- Put `Closes #<issue>` in the PR description for every card it finishes. When
+  the PR merges, GitHub closes those issues and the board moves the cards to
+  Done, which is what the burn-up chart counts. Don't move cards to Done by
+  hand before the work is merged.
 
 ## Commit messages
 
@@ -38,23 +41,20 @@ Covers FR03 and test cases UT_07 to UT_11.
   - validate request bodies with a schema through `validate()` (SR05)
   - never log request bodies, amounts, tokens or passwords (SR10)
 
-## Building blocks for registration and login
+## Authentication building blocks
 
-Sessions, lockout and rate limiting are already in place. The registration and
-login endpoints go in `backend/src/routes/authRoutes.js` and use:
+Registration, login, logout, sessions, lockout and password recovery are all
+built. If you add anything that logs a user in or out, reuse these:
 
 | Need | Use |
 |---|---|
-| Start a session after the password checks out | `createSession(user.id)` from `services/sessionService.js`, then set the cookie with `sessionCookieOptions()` from `middleware/requireAuth.js` (example at the top of `sessionService.js`) |
-| Lock an account after repeated failures (SR09) | `isLocked`, `recordFailedLogin` and `resetFailedLogins` from `services/loginProtection.js` |
-| Per-IP limit on login attempts | Already applied to `/api/auth/login` in `app.js` |
-| Make the routes reachable without a session | `POST /api/auth/register` and `POST /api/auth/login` are already in `PUBLIC_ROUTES` |
-| Validate the request body (SR05) | `validate(schema)` from `middleware/validate.js`, with any schema that has a zod-style `safeParse()` |
-| Store the password (SR02) | `users.password_hash` column; hashing is up to the registration and hashing items |
-
-Logout (`POST /api/auth/logout`) and the current user (`GET /api/auth/me`)
-already work. The users table has `failed_login_count` and `locked_until` for
-the lockout.
+| Start a session | `createSession(user.id)` from `services/sessionService.js`, then set the cookie with `sessionCookieOptions()` from `middleware/requireAuth.js` |
+| End sessions | `destroySession(token)`, or delete the user's rows in `sessions` to log out everywhere |
+| Lockout after repeated failures (SR09) | `isLocked`, `recordFailedLogin`, `resetFailedLogins` from `services/loginProtection.js` |
+| Check a password without revealing whether the email exists | `verifyPassword`, or `verifyAgainstDummyHash` for an unknown email, from `services/passwordService.js` |
+| A route that works without logging in | Add it to `PUBLIC_ROUTES` in `middleware/requireAuth.js` and give it a rate limit in `app.js` |
+| Validate a request body (SR05) | `validate(schema)` from `middleware/validate.js` with a zod schema |
+| Send an email | `sendMail()` from `services/mailService.js` (SMTP, or the local outbox in development) |
 
 ## Working with user data (SR04)
 
@@ -113,5 +113,15 @@ A test fails if any table with a `user_id` column is missing row-level security.
 ## Tests
 
 Backend tests live in `backend/test/` and use Node's built-in test runner with
-Supertest. Name tests after the test plan IDs where one exists, e.g.
-`'UT_08 refuses a negative amount'`.
+Supertest. CI runs all of them on every pull request.
+
+The 50 test-plan cases are in `backend/test/plan/`, one test per ID, written with
+`planTest()` from `planHelpers.js`. Each returns a sentence describing what
+actually happened. When a feature lands that a case was waiting for:
+
+- **The case was "not implemented".** Replace its `notImplemented(...)` line with a real `planTest`.
+- **The case was a known gap.** Remove its `gap` option once it passes.
+- **Either way,** run `npm run test:plan -w backend` and commit the regenerated `Documents/07_Test_Results.md`.
+
+Tests that depend on today's date must compute dates relative to now. The API
+refuses a "today" more than a day away from the real date.
