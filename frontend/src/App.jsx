@@ -1,3 +1,4 @@
+import SpendingCharts from './SpendingCharts.jsx';
 import { useCallback, useEffect, useState } from 'react';
 import VoiceExpenseButton from './VoiceExpenseButton.jsx';
 import { parseSpokenExpense } from './voiceParser.js';
@@ -1057,6 +1058,14 @@ function Dashboard({ user, onLogout }) {
           <BudgetPace budget={overallBudget} />
         </article>
       </section>
+      
+<SpendingCharts
+  expenses={monthExpenses}
+  allExpenses={expenses}
+  month={month}
+  categories={categories}
+/>
+
 
       <section className="expense-section">
         <h2>
