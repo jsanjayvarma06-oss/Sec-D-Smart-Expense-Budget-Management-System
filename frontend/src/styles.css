@@ -442,3 +442,17 @@ h3 {
   filter: none;
   text-decoration: underline;
 }
+
+.pace-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+.pace-early {
+  color: #b54708;
+  font-weight: 600;
+}
+
+.pace-ok {
+  color: #16805d;
+}

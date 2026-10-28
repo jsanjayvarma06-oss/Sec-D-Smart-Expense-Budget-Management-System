@@ -56,6 +56,35 @@ function formatCurrency(amount) {
   }).format(Number(amount) || 0);
 }
 
+// Budget pace (story #93): when this month's budget will run out at the
+// current daily spending, from the API's pace fields.
+function BudgetPace({ budget }) {
+  if (!budget || !budget.pace_status || budget.pace_status === 'exceeded') return null;
+
+  if (budget.pace_status === 'early') {
+    const runOut = new Date(`${budget.projected_run_out}T00:00:00`).toLocaleDateString('en-IN', {
+      weekday: 'short', day: 'numeric', month: 'short',
+    });
+    const days = budget.days_early === 1 ? '1 day' : `${budget.days_early} days`;
+    return (
+      <p className="pace-note pace-early">
+        At this pace it runs out on {runOut}, {days} early.
+      </p>
+    );
+  }
+
+  if (budget.pace_status === 'not_enough_data') {
+    return <p className="pace-note muted">Spending pace shows from the 3rd of the month.</p>;
+  }
+
+  return (
+    <p className="pace-note pace-ok">
+      On track for the month
+      {budget.daily_pace ? ` at ${formatCurrency(budget.daily_pace)} a day` : ''}.
+    </p>
+  );
+}
+
 function AuthScreen({ onLogin, notice = '' }) {
   const [mode, setMode] = useState('login');
   const [name, setName] = useState('');
@@ -999,6 +1028,7 @@ function Dashboard({ user, onLogout }) {
               ? formatCurrency(overallBudget.remaining_amount)
               : '—'}
           </h2>
+          <BudgetPace budget={overallBudget} />
         </article>
       </section>
 
@@ -1163,6 +1193,8 @@ function Dashboard({ user, onLogout }) {
                       style={{ width: `${percentage}%` }}
                     />
                   </div>
+
+                  <BudgetPace budget={budget} />
 
                   {budget.exceeded && (
                     <p className="warning-message">
