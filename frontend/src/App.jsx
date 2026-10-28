@@ -1008,7 +1008,7 @@ function Dashboard({ user, onLogout }) {
         </h2>
 
         {notifications.length === 0 ? (
-          <p>No notifications yet. Payment reminders will appear here when recurring payments are due.</p>
+          <p>No notifications yet. Budget alerts and payment reminders will appear here.</p>
         ) : (
           notifications.map((notification) => (
             <div
