@@ -245,10 +245,29 @@ export async function deleteBudget(userId, budgetId) {
  *
  * Returns an empty array when the user has no budgets for that month.
  */
-export async function getRemainingBudget(userId, month) {
+// Dates come back from PostgreSQL as 'YYYY-MM-DD' strings (see db/pool.js).
+function daysBetween(from, to) {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
+function serverToday() {
+  const d = new Date();
+  return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+}
+
+// Budget pace (story #93): for the current month, project the day each budget
+// runs out at the average daily spending so far.
+//   pace_status        'on_track' | 'early' | 'exceeded' | 'not_enough_data',
+//                      or null for a month that isn't the current one
+//   projected_run_out  'YYYY-MM-DD' when the budget runs out before month end
+//   days_early         days between that date and the last day of the month
+// The first 2 days of a month are too little to project from. `today` is a
+// parameter so tests can pin the date.
+export async function getRemainingBudget(userId, month, today = serverToday()) {
   return withUser(userId, async (db) => {
     const { rows } = await db.query(
-      `SELECT
+      `WITH totals AS (
+       SELECT
          b.id AS budget_id,
          b.month,
          b.category_id,
@@ -276,21 +295,53 @@ export async function getRemainingBudget(userId, month) {
          b.category_id,
          c.name,
          b.amount
-       ORDER BY b.category_id NULLS FIRST, c.name ASC`,
-      [userId, normalizeMonth(month)],
+       ),
+       pace AS (
+         SELECT t.*,
+                ($3::date >= t.month AND $3::date < t.month + INTERVAL '1 month') AS is_current,
+                ($3::date - t.month + 1) AS days_elapsed,
+                (t.month + INTERVAL '1 month' - INTERVAL '1 day')::date AS month_end
+         FROM totals t
+       ),
+       projected AS (
+         SELECT p.*,
+                CASE WHEN p.is_current AND p.spent_amount > 0
+                     THEN round(p.spent_amount / p.days_elapsed, 2) END AS daily_pace,
+                CASE WHEN p.is_current AND p.spent_amount > 0 AND NOT p.exceeded
+                     THEN $3::date + ceil(p.remaining_amount / (p.spent_amount / p.days_elapsed))::int END AS run_out
+         FROM pace p
+       )
+       SELECT *,
+              CASE
+                WHEN NOT is_current THEN NULL
+                WHEN exceeded THEN 'exceeded'
+                WHEN days_elapsed < 3 THEN 'not_enough_data'
+                WHEN run_out IS NOT NULL AND run_out < month_end THEN 'early'
+                ELSE 'on_track'
+              END AS pace_status
+       FROM projected
+       ORDER BY category_id NULLS FIRST, category_name ASC`,
+      [userId, normalizeMonth(month), today],
     );
 
     // The subtraction happened in SQL, so converting the exact NUMERIC results
     // to numbers here cannot introduce rounding like 400.19999999999993.
-    return rows.map((row) => ({
-      budget_id: row.budget_id,
-      month: formatBudget(row).month,
-      category_id: row.category_id,
-      category_name: row.category_name,
-      budget_amount: Number(row.budget_amount),
-      spent_amount: Number(row.spent_amount),
-      remaining_amount: Number(row.remaining_amount),
-      exceeded: row.exceeded,
-    }));
+    return rows.map((row) => {
+      const early = row.pace_status === 'early';
+      return {
+        budget_id: row.budget_id,
+        month: formatBudget(row).month,
+        category_id: row.category_id,
+        category_name: row.category_name,
+        budget_amount: Number(row.budget_amount),
+        spent_amount: Number(row.spent_amount),
+        remaining_amount: Number(row.remaining_amount),
+        exceeded: row.exceeded,
+        pace_status: row.pace_status,
+        daily_pace: row.daily_pace === null ? null : Number(row.daily_pace),
+        projected_run_out: early ? row.run_out : null,
+        days_early: early ? daysBetween(row.run_out, row.month_end) : null,
+      };
+    });
   });
 }
