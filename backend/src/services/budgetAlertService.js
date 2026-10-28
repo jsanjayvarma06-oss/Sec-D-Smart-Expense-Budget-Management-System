@@ -5,6 +5,10 @@ const ALERT_THRESHOLDS = [
   { percentage: 80, level: '80_PERCENT', message: 'You have used at least 80% of your budget.' },
 ];
 
+function toPaise(amount) {
+  return Math.round(Number(amount) * 100);
+}
+
 /**
  * Check overall and category budgets against alert thresholds.
  * This service calculates alerts but does not send notifications.
@@ -18,11 +22,14 @@ export async function getBudgetAlerts(userId, month) {
       continue;
     }
 
-    const percentageUsed =
-      (budget.spent_amount / budget.budget_amount) * 100;
+    // Compare whole paise so exactly 80% is never missed by floating-point
+    // rounding (4.52 of 5.65 is 79.99999999999999 as a JavaScript division).
+    const spentPaise = toPaise(budget.spent_amount);
+    const budgetPaise = toPaise(budget.budget_amount);
+    const percentageUsed = (spentPaise / budgetPaise) * 100;
 
     for (const threshold of ALERT_THRESHOLDS) {
-      if (percentageUsed >= threshold.percentage) {
+      if (spentPaise * 100 >= threshold.percentage * budgetPaise) {
         alerts.push({
           budget_id: budget.budget_id,
           month: budget.month,
