@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import VoiceExpenseButton from './VoiceExpenseButton.jsx';
+import { parseSpokenExpense } from './voiceParser.js';
 
 const currentMonth = new Date().toISOString().slice(0, 7);
 
@@ -338,6 +340,7 @@ function Dashboard({ user, onLogout }) {
   const [categories, setCategories] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [expenseForm, setExpenseForm] = useState(emptyExpense);
+  const [voiceNote, setVoiceNote] = useState({ kind: '', text: '' });
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -474,6 +477,28 @@ function Dashboard({ user, onLogout }) {
     }));
   }
 
+  // Voice entry (story #87): fill the form from a spoken sentence, for the
+  // user to check before saving.
+  function applyVoiceTranscript(transcript) {
+    const parsed = parseSpokenExpense(transcript, categories.map((c) => c.name));
+    if (!parsed.amount) {
+      setVoiceNote({ kind: 'error', text: `Heard "${transcript}" but couldn't catch an amount. Try again, or type it in.` });
+      return;
+    }
+    const category = categories.find((c) => c.name === parsed.categoryName);
+    const spentOn = new Date();
+    spentOn.setDate(spentOn.getDate() - parsed.daysAgo);
+    setExpenseForm((current) => ({
+      ...current,
+      amount: String(parsed.amount),
+      category_id: category ? category.id : current.category_id,
+      merchant: parsed.merchant ?? current.merchant,
+      note: parsed.note ?? current.note,
+      spent_on: [spentOn.getFullYear(), String(spentOn.getMonth() + 1).padStart(2, '0'), String(spentOn.getDate()).padStart(2, '0')].join('-'),
+    }));
+    setVoiceNote({ kind: 'ok', text: `Heard "${transcript}". Check the details below, then click Add expense.${category ? '' : ' Pick a category.'}` });
+  }
+
   function startEditing(expense) {
     setEditingId(expense.id);
 
@@ -501,6 +526,7 @@ function Dashboard({ user, onLogout }) {
     event.preventDefault();
     setError('');
     setMessage('');
+    setVoiceNote({ kind: '', text: '' });
 
     if (!expenseForm.category_id) {
       setError('Please select a category.');
@@ -1224,6 +1250,22 @@ function Dashboard({ user, onLogout }) {
           <p className="warning-message">
             No categories are available. Check the category API before adding
             an expense.
+          </p>
+        )}
+
+        {!editingId && (
+          <div className="voice-entry">
+            <VoiceExpenseButton
+              onTranscript={applyVoiceTranscript}
+              onError={(text) => setVoiceNote({ kind: 'error', text })}
+              disabled={categories.length === 0}
+            />
+            <span className="muted">Try: "Spent 120 on chai at the canteen"</span>
+          </div>
+        )}
+        {voiceNote.text && (
+          <p className={voiceNote.kind === 'error' ? 'error-message' : 'success-message'} role="status">
+            {voiceNote.text}
           </p>
         )}
 
