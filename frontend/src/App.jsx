@@ -367,6 +367,8 @@ function Dashboard({ user, onLogout }) {
     amount: '',
   });
   const [categoryBudgetSaving, setCategoryBudgetSaving] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categorySaving, setCategorySaving] = useState(false);
 
   const refreshData = useCallback(() => {
     setRefreshVersion((version) => version + 1);
@@ -741,6 +743,48 @@ function Dashboard({ user, onLogout }) {
       setRecurringSaving(false);
     }
   }
+  async function handleCategorySubmit(event) {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+
+    const name = newCategoryName.trim();
+    if (!name) {
+      setError('Enter a category name.');
+      return;
+    }
+
+    setCategorySaving(true);
+
+    try {
+      await apiRequest('/api/categories', {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      });
+
+      setNewCategoryName('');
+      setMessage(`Category "${name}" added.`);
+      refreshData();
+    } catch (err) {
+      setError(err.message || 'Could not add category.');
+    } finally {
+      setCategorySaving(false);
+    }
+  }
+
+  async function handleCategoryDelete(category) {
+    setError('');
+    setMessage('');
+
+    try {
+      await apiRequest(`/api/categories/${category.id}`, { method: 'DELETE' });
+      setMessage(`Category "${category.name}" deleted.`);
+      refreshData();
+    } catch (err) {
+      setError(err.message || 'Could not delete category.');
+    }
+  }
+
   async function handleMarkNotificationRead(notification) {
     setError('');
 
@@ -1105,6 +1149,53 @@ function Dashboard({ user, onLogout }) {
             </button>
           </div>
         </form>
+      </section>
+
+      <section className="expense-section">
+        <h2>Your categories</h2>
+        <p className="muted">
+          Add your own categories next to the built-in ones. You can use them
+          for expenses and budgets, and delete one once nothing uses it.
+        </p>
+
+        <form className="expense-form" onSubmit={handleCategorySubmit}>
+          <label>
+            New category
+            <input
+              type="text"
+              maxLength={50}
+              value={newCategoryName}
+              onChange={(event) => setNewCategoryName(event.target.value)}
+              placeholder="e.g. Pet care"
+              required
+            />
+          </label>
+
+          <div className="expense-form-actions">
+            <button type="submit" disabled={categorySaving}>
+              {categorySaving ? 'Adding…' : 'Add category'}
+            </button>
+          </div>
+        </form>
+
+        {categories.some((category) => category.user_id) && (
+          <ul className="muted">
+            {categories
+              .filter((category) => category.user_id)
+              .map((category) => (
+                <li key={category.id}>
+                  {category.name}{' '}
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => handleCategoryDelete(category)}
+                  >
+                    Delete
+                  </button>
+                </li>
+              ))}
+          </ul>
+        )}
       </section>
 
       <section className="expense-section">

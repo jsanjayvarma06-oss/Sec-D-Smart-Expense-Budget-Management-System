@@ -138,6 +138,34 @@ describe('Category Management API', () => {
     assert.equal(response.body.category.name, 'New Name');
   });
 
+  test('refuses to rename a category to a name that already exists', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+
+    await request(app)
+      .post('/api/categories')
+      .set('Cookie', cookie)
+      .send({ name: 'Pet Care' })
+      .expect(201);
+
+    const other = await request(app)
+      .post('/api/categories')
+      .set('Cookie', cookie)
+      .send({ name: 'Hobbies' })
+      .expect(201);
+
+    // Same name in a different letter case, and a built-in name.
+    for (const name of ['pet care', 'Food']) {
+      const response = await request(app)
+        .put(`/api/categories/${other.body.category.id}`)
+        .set('Cookie', cookie)
+        .send({ name })
+        .expect(409);
+
+      assert.equal(response.body.code, 'CATEGORY_EXISTS');
+    }
+  });
+
   test('does not allow updating a built-in default category', async () => {
     const user = await createUser();
     const cookie = await loginAs(user);
