@@ -486,4 +486,36 @@ describe('Budget Management API', () => {
       false,
     );
   });
+
+  test('allows category budgets that add up to exactly the overall budget, and explains a refusal', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+
+    const { body } = await request(app).get('/api/categories').set('Cookie', cookie).expect(200);
+    const food = body.categories.find((c) => c.name === 'Food');
+    const transport = body.categories.find((c) => c.name === 'Transport');
+
+    const set = (amount, category) => request(app)
+      .post('/api/budgets')
+      .set('Cookie', cookie)
+      .send({ month: '2026-10', amount, category_id: category?.id ?? null });
+
+    await set(1000.30).expect(201);
+    await set(600.10, food).expect(201);
+    // 600.10 + 400.20 is exactly 1000.30: allowed, no floating-point surprise.
+    await set(400.20, transport).expect(201);
+
+    // One paisa more is refused, with the message the SRS update promises (FR07).
+    const refused = await set(400.21, transport).expect(400);
+    assert.equal(refused.body.code, 'CATEGORY_BUDGETS_EXCEED_OVERALL');
+    assert.equal(
+      refused.body.error,
+      'The combined category budgets cannot exceed the overall monthly budget',
+    );
+
+    // The refused change left the saved budget alone.
+    const listed = await request(app).get('/api/budgets?month=2026-10').set('Cookie', cookie).expect(200);
+    const saved = listed.body.budgets.find((b) => b.category_id === transport.id);
+    assert.equal(Number(saved.amount), 400.2);
+  });
 });

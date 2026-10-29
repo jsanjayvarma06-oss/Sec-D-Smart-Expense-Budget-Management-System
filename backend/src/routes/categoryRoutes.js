@@ -62,17 +62,23 @@ export function categoryRoutes() {
   router.put('/:id', validate(updateCategorySchema), async (req, res, next) => {
     try {
       const categoryId = validateCategoryId(req.params.id);
-      const category = await updateCategory(
+      const result = await updateCategory(
         req.user.id,
         categoryId,
         req.body,
       );
 
-      if (!category) {
+      if (result?.error === 'CATEGORY_EXISTS') {
+        throw new HttpError(409, 'A category with this name already exists', {
+          code: 'CATEGORY_EXISTS',
+        });
+      }
+
+      if (!result) {
         throw new HttpError(404, 'Custom category not found');
       }
 
-      res.json({ category });
+      res.json({ category: result.category });
     } catch (err) {
       next(err);
     }

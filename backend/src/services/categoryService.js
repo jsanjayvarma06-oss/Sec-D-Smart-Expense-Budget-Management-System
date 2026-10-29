@@ -59,7 +59,7 @@ export async function updateCategory(userId, categoryId, category) {
     );
 
     if (existing.rows.length > 0) {
-      return null;
+      return { error: 'CATEGORY_EXISTS' };
     }
 
     const { rows } = await db.query(
@@ -70,7 +70,7 @@ export async function updateCategory(userId, categoryId, category) {
       [category.name, categoryId, userId],
     );
 
-    return rows[0] ?? null;
+    return rows[0] ? { category: rows[0] } : null;
   });
 }
 
