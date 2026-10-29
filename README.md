@@ -113,6 +113,7 @@ All settings are environment variables. Only `DATABASE_URL` is required.
 | `PASSWORD_RESET_MINUTES` | 30 | Reset link lifetime |
 | `SMTP_URL` | none | SMTP server for email; unset means the local outbox |
 | `MAIL_FROM` | Smart Expense &lt;no-reply@localhost&gt; | Sender address |
+| `TWO_FACTOR_KEY` | development key | 64 hex characters that encrypt two-factor secrets; required in production (`openssl rand -hex 32`) |
 | `API_PROXY_TARGET` | http://localhost:4000 | Frontend dev server's API address (`frontend/.env`) |
 
 ## Scripts
@@ -132,6 +133,7 @@ Run from the repository root.
 | `npm run db:crash-drill -w backend -- --yes` | Forced-shutdown test for NFR10 (stops PostgreSQL; never on production) |
 | `npm run load:seed -w backend` / `npm run load:run -w backend` | Load-test data and runner for NFR01 and NFR05 |
 | `npm run mail:latest -w backend` | Show the newest email in the local outbox |
+| `npm run admin:create -w backend -- <email>` | Make a registered account an admin (opens the Admin panel at `/admin`) |
 
 ## Quality
 

@@ -1,6 +1,9 @@
 import SpendingCharts from './SpendingCharts.jsx';
 import { useCallback, useEffect, useState } from 'react';
 import VoiceExpenseButton from './VoiceExpenseButton.jsx';
+import SubscriptionsCard from './SubscriptionsCard.jsx';
+import AdminPanel from './AdminPanel.jsx';
+import TwoFactorSetup from './TwoFactorSetup.jsx';
 import { parseSpokenExpense } from './voiceParser.js';
 
 const currentMonth = new Date().toISOString().slice(0, 7);
@@ -335,7 +338,7 @@ function ResetPasswordScreen({ token, onDone }) {
   );
 }
 
-function Dashboard({ user, onLogout }) {
+function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
   const [month, setMonth] = useState(currentMonth);
   const [budgets, setBudgets] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -362,6 +365,8 @@ function Dashboard({ user, onLogout }) {
     note: '',
   });
   const [recurringSaving, setRecurringSaving] = useState(false);
+  const [subscriptions, setSubscriptions] = useState([]);
+  const [subscriptionSaving, setSubscriptionSaving] = useState('');
   const [categoryBudgetForm, setCategoryBudgetForm] = useState({
     category_id: '',
     amount: '',
@@ -422,6 +427,16 @@ function Dashboard({ user, onLogout }) {
             method: 'POST',
             body: JSON.stringify({ today: localToday() }),
           });
+          await apiRequest('/api/insights/subscriptions/price-alerts', {
+            method: 'POST',
+            body: JSON.stringify({ today: localToday() }),
+          });
+          const subscriptionResult = await apiRequest(
+            `/api/insights/subscriptions?today=${localToday()}`,
+          );
+          if (active) {
+            setSubscriptions(subscriptionResult.subscriptions || []);
+          }
           const notificationResult = await apiRequest('/api/notifications');
           if (active) {
             setNotifications(notificationResult.notifications || []);
@@ -785,6 +800,39 @@ function Dashboard({ user, onLogout }) {
     }
   }
 
+  // "Make recurring" on a detected subscription (story #90). The merchant is
+  // saved as the note, which is how the detector knows it is set up.
+  async function handleMakeRecurring(subscription) {
+    setError('');
+    setMessage('');
+    setSubscriptionSaving(subscription.merchant_key);
+
+    try {
+      await apiRequest('/api/recurring-expenses', {
+        method: 'POST',
+        body: JSON.stringify({
+          category_id: subscription.category_id,
+          amount: Number(subscription.latest_amount),
+          cycle: subscription.cycle,
+          start_date: subscription.next_expected_date,
+          note: subscription.merchant,
+        }),
+      });
+
+      const [recurringResult, subscriptionResult] = await Promise.all([
+        apiRequest('/api/recurring-expenses'),
+        apiRequest(`/api/insights/subscriptions?today=${localToday()}`),
+      ]);
+      setRecurringExpenses(recurringResult.recurringExpenses || []);
+      setSubscriptions(subscriptionResult.subscriptions || []);
+      setMessage(`${subscription.merchant} is now a recurring payment.`);
+    } catch (err) {
+      setError(err.message || 'Could not create recurring payment.');
+    } finally {
+      setSubscriptionSaving('');
+    }
+  }
+
   async function handleMarkNotificationRead(notification) {
     setError('');
 
@@ -831,6 +879,15 @@ function Dashboard({ user, onLogout }) {
               onChange={(event) => setMonth(event.target.value)}
             />
           </label>
+          {user.role === 'admin' && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onOpenAdmin}
+            >
+              Admin panel
+            </button>
+          )}
           <button
             type="button"
             className="secondary-button"
@@ -1002,6 +1059,13 @@ function Dashboard({ user, onLogout }) {
           </div>
         )}
       </section>
+
+      <SubscriptionsCard
+        subscriptions={subscriptions}
+        savingKey={subscriptionSaving}
+        onMakeRecurring={handleMakeRecurring}
+      />
+
       <section className="budget-alerts" aria-label="Notifications">
         <h2>
           Notifications ({notifications.filter((item) => !item.is_read).length} unread)
@@ -1554,6 +1618,8 @@ function Dashboard({ user, onLogout }) {
         )}
       </section>
 
+      <TwoFactorSetup user={user} apiRequest={apiRequest} onEnabled={onUserChanged} />
+
       <footer className="dashboard-footer">
         <p className="muted">Signed in as {user.email}.</p>
         <button
@@ -1579,6 +1645,24 @@ export default function App() {
       ? new URLSearchParams(window.location.search).get('token') || ''
       : ''
   ));
+
+  const [adminOpen, setAdminOpen] = useState(() => window.location.pathname === '/admin');
+
+  // /admin is the admin panel. Back and forward in the browser switch between it
+  // and the dashboard.
+  useEffect(() => {
+    function handlePopState() {
+      setAdminOpen(window.location.pathname === '/admin');
+    }
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  function openAdmin(open) {
+    window.history.pushState(null, '', open ? '/admin' : '/');
+    setAdminOpen(open);
+  }
 
   function finishReset(message) {
     window.history.replaceState(null, '', '/');
@@ -1659,5 +1743,18 @@ export default function App() {
     );
   }
 
-  return <Dashboard user={user} onLogout={handleLogoutComplete} />;
+  // Only admins get the panel; anyone else at /admin sees their dashboard. The
+  // API refuses non-admins either way.
+  if (adminOpen && user.role === 'admin') {
+    return <AdminPanel user={user} apiRequest={apiRequest} onBack={() => openAdmin(false)} />;
+  }
+
+  return (
+    <Dashboard
+      user={user}
+      onLogout={handleLogoutComplete}
+      onOpenAdmin={() => openAdmin(true)}
+      onUserChanged={loadCurrentUser}
+    />
+  );
 }

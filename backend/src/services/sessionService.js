@@ -45,15 +45,17 @@ export async function findSession(token) {
        AND u.id = s.user_id
        AND s.expires_at > now()
        AND s.last_seen_at > now() - make_interval(mins => $2)
-     RETURNING u.id, u.name, u.email`,
+     RETURNING u.id, u.name, u.email, u.role,
+               u.two_factor_enabled_at IS NOT NULL AS two_factor_enabled`,
     [tokenHash, config.session.idleMinutes],
   );
   if (rows.length === 0) {
     await query(`DELETE FROM sessions WHERE token_hash = $1`, [tokenHash]);
     return null;
   }
-  const { id, name, email } = rows[0];
-  return { id, name, email };
+  // The role is read on every request, so a change takes effect immediately.
+  const { id, name, email, role, two_factor_enabled: twoFactorEnabled } = rows[0];
+  return { id, name, email, role, two_factor_enabled: twoFactorEnabled };
 }
 
 export async function destroySession(token) {

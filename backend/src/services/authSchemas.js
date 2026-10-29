@@ -31,6 +31,14 @@ export const resetPasswordSchema = z.object({
   password: registerSchema.shape.password,
 });
 
+// The 6-digit code from an authenticator app. Spaces are allowed, as some apps
+// show the code as "123 456".
+export const twoFactorCodeSchema = z.object({
+  code: z.string()
+    .transform((value) => value.replace(/\s/g, ''))
+    .pipe(z.string().regex(/^\d{6}$/, 'Enter the 6-digit code from your app')),
+});
+
 export const loginSchema = z.object({
   email: z.string()
     .trim()
