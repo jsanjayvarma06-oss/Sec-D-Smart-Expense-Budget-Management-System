@@ -369,6 +369,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
   const [budgetAlerts, setBudgetAlerts] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [financialHealth, setFinancialHealth] = useState(null);
+  const [forecast, setForecast] = useState(null);
   const [recurringExpenses, setRecurringExpenses] = useState([]);
   const [recurringForm, setRecurringForm] = useState({
     category_id: '',
@@ -400,7 +401,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
       setError('');
 
       try {
-        const [budgetResult, categoryResult, expenseResult, recurringResult, alertResult, healthResult] =
+        const [budgetResult, categoryResult, expenseResult, recurringResult, alertResult, healthResult, forecastResult] =
           await Promise.all([
             apiRequest(
               `/api/budgets/remaining?month=${encodeURIComponent(month)}`,
@@ -414,6 +415,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
             apiRequest(
               `/api/financial-health?month=${encodeURIComponent(month)}`,
             ),
+            apiRequest('/api/forecast/monthly'),
           ]);
 
         if (!active) return;
@@ -424,6 +426,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
         setRecurringExpenses(recurringResult.recurringExpenses || []);
         setBudgetAlerts(alertResult.alerts || []);
         setFinancialHealth(healthResult.health || null);
+        setForecast(forecastResult.forecast || null);
 
         try {
           await apiRequest('/api/recurring-expenses/generate-due', {
@@ -1108,6 +1111,30 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
               )}
             </div>
           ))
+        )}
+      </section>
+
+      <section className="budget-alerts" aria-label="Monthly spending forecast">
+        <h2>Monthly Spending Forecast</h2>
+        {forecast?.available ? (
+          <>
+            <div className="summary-card">
+              <h2>{formatCurrency(forecast.forecast)}</h2>
+              <p>Expected spending in a typical month</p>
+            </div>
+            <p className="muted">
+              The average of your last {forecast.monthsOfHistory} complete
+              months of spending.
+            </p>
+          </>
+        ) : forecast ? (
+          <p className="muted">
+            {forecast.reason} You have {forecast.monthsOfHistory} so far. The
+            forecast appears once you have spending in each of the last 3
+            complete months.
+          </p>
+        ) : (
+          <p className="muted">The forecast is not available yet.</p>
         )}
       </section>
 

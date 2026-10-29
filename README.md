@@ -20,7 +20,7 @@ Built by Team Sec-D: Sanjay, Dinesh and Jahnavi.
 | Financial health score | FR18 | Yes | Yes |
 | Income records | FR02 | Not yet | Yes |
 | Spending by category and month (chart data) | FR10 | Charts not yet | Yes |
-| Monthly spending forecast | FR12 | Not yet | Yes |
+| Monthly spending forecast | FR12 | Yes | Yes |
 | Budget recommendations | FR13 | Not yet | Yes, with a known issue (#45) |
 | What-if simulator | FR19 | Not yet | Budget/income simulation; planned-purchase mode missing (#47) |
 | Category suggestion from merchant | FR05 | No | Not reachable (#32) |

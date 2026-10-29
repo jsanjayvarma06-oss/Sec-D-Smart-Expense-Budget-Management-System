@@ -33,3 +33,15 @@ export async function loginAs(user) {
   const token = await createSession(user.id);
   return `sid=${token}`;
 }
+
+// A date `months` months before the current one, on the given day (default
+// the 10th). Tests that depend on today's date must compute dates like this
+// instead of hard-coding them (see CONTRIBUTING).
+export function monthsAgo(months, day = 10) {
+  const now = new Date();
+  return new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth() - months,
+    day,
+  )).toISOString().slice(0, 10);
+}
