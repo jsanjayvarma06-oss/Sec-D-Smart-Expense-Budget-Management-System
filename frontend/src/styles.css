@@ -470,6 +470,48 @@ h3 {
   color: #b42318;
 }
 
+.subscription-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.subscription-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.subscription-item p {
+  margin: 4px 0 0;
+}
+
+.subscription-cycle {
+  font-size: 12px;
+  text-transform: capitalize;
+  color: #475467;
+}
+
+.subscription-rise {
+  color: #b54708;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.subscription-done {
+  color: #16805d;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 
 
 /* Modern spending analytics layout */

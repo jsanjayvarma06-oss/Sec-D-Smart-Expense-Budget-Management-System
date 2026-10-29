@@ -23,6 +23,7 @@ import { categoryRoutes } from './routes/categoryRoutes.js';
 import { notificationRoutes } from './routes/notificationRoutes.js';
 import { budgetRoutes } from './routes/budgetRoutes.js';
 import { analyticsRoutes } from './routes/analyticsRoutes.js';
+import { insightRoutes } from './routes/insightRoutes.js';
 export function createApp({
   loginRateLimit = 20,
   apiRateLimit = 300,
@@ -97,6 +98,7 @@ app.use('/api/income', incomeRoutes());
 app.use('/api/what-if', whatIfRoutes());
   app.use('/api/analytics', analyticsRoutes());
   app.use('/api/notifications', notificationRoutes());
+  app.use('/api/insights', insightRoutes());
 
 
   // Error handling
