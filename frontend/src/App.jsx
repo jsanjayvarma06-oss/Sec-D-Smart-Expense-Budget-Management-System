@@ -408,7 +408,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
             ),
             apiRequest('/api/categories'),
             apiRequest('/api/expenses'),
-            apiRequest('/api/recurring-expenses'),
+            apiRequest(`/api/recurring-expenses?today=${localToday()}`),
             apiRequest(
               `/api/budgets/alerts?month=${encodeURIComponent(month)}`,
             ),
@@ -434,7 +434,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
             body: JSON.stringify({ today: localToday() }),
           });
 
-          const recurringResult = await apiRequest('/api/recurring-expenses');
+          const recurringResult = await apiRequest(`/api/recurring-expenses?today=${localToday()}`);
           if (active) {
             setRecurringExpenses(recurringResult.recurringExpenses || []);
           }
@@ -840,7 +840,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
       });
 
       const [recurringResult, subscriptionResult] = await Promise.all([
-        apiRequest('/api/recurring-expenses'),
+        apiRequest(`/api/recurring-expenses?today=${localToday()}`),
         apiRequest(`/api/insights/subscriptions?today=${localToday()}`),
       ]);
       setRecurringExpenses(recurringResult.recurringExpenses || []);
@@ -850,6 +850,27 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
       setError(err.message || 'Could not create recurring payment.');
     } finally {
       setSubscriptionSaving('');
+    }
+  }
+
+  // UC-07: marking the unpaid cycle as paid stops its reminders.
+  async function handleMarkRecurringPaid(payment) {
+    setError('');
+    setMessage('');
+
+    try {
+      await apiRequest(
+        `/api/recurring-expenses/${encodeURIComponent(payment.id)}/pay`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ due_date: payment.unpaid_due_date }),
+        },
+      );
+
+      setMessage('Payment marked as paid. Its reminders have stopped.');
+      refreshData();
+    } catch (err) {
+      setError(err.message || 'Could not mark the payment as paid.');
     }
   }
 
@@ -1074,6 +1095,22 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
                 <p>Next due: {payment.next_due_date}</p>
                 {payment.note && <p>Note: {payment.note}</p>}
                 <p>Status: {payment.is_active ? 'Active' : 'Inactive'}</p>
+                {payment.unpaid_due_date && (
+                  <>
+                    <p className={payment.is_overdue ? 'expense-warning' : ''}>
+                      {payment.is_overdue ? 'Overdue: ' : 'Due today: '}
+                      {formatCurrency(payment.amount)} for{' '}
+                      {payment.unpaid_due_date} is not marked as paid.
+                    </p>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => handleMarkRecurringPaid(payment)}
+                    >
+                      Mark as paid
+                    </button>
+                  </>
+                )}
               </article>
             ))}
           </div>

@@ -141,28 +141,63 @@ export async function markRecurringExpensePaid(userId, recurringExpenseId, dueDa
       [dueDate, recurringExpenseId, userId],
     );
 
-    return rows[0] ?? null;
+    if (!rows[0]) return null;
+
+    // The reminders for this cycle, and for any earlier one, are done: mark
+    // them read so they stop showing as something to deal with. The date is
+    // the last part of their dedupe key.
+    await db.query(
+      `UPDATE notifications
+       SET is_read = true
+       WHERE user_id = $1
+         AND type IN ('payment_reminder', 'payment_overdue')
+         AND is_read = false
+         AND split_part(dedupe_key, ':', 2) = $2
+         AND split_part(dedupe_key, ':', 3)::date <= $3::date`,
+      [userId, recurringExpenseId, dueDate],
+    );
+
+    return rows[0];
   });
 }
 
 
 
-export async function listRecurringExpenses(userId) {
+// `today` is the user's own date (YYYY-MM-DD); it defaults to the server's.
+//
+// unpaid_due_date is the most recent cycle whose expense has been created but
+// not marked paid. It is overdue (UC-07 10a) once that date is before today,
+// so a payment that fell due today is still shown as simply unpaid.
+export async function listRecurringExpenses(userId, today = null) {
+  const asOf = today ?? new Date().toISOString().slice(0, 10);
+
   return withUser(userId, async (db) => {
     const { rows } = await db.query(
       `SELECT r.id, r.category_id, c.name AS category_name,
               r.amount, r.cycle, r.start_date::text AS start_date,
               r.next_due_date::text AS next_due_date, r.note,
               r.is_active,
-              r.last_paid_due_date::text AS last_paid_due_date
+              r.last_paid_due_date::text AS last_paid_due_date,
+              CASE WHEN r.is_active THEN (
+                SELECT MAX(e.spent_on)::text
+                FROM expenses e
+                WHERE e.recurring_expense_id = r.id
+                  AND e.user_id = r.user_id
+                  AND e.spent_on <= $2::date
+                  AND (r.last_paid_due_date IS NULL
+                       OR e.spent_on > r.last_paid_due_date)
+              ) END AS unpaid_due_date
        FROM recurring_expenses r
        JOIN categories c ON c.id = r.category_id
        WHERE r.user_id = $1
        ORDER BY r.is_active DESC, r.next_due_date ASC`,
-      [userId],
+      [userId, asOf],
     );
 
-    return rows;
+    return rows.map((row) => ({
+      ...row,
+      is_overdue: row.unpaid_due_date !== null && row.unpaid_due_date < asOf,
+    }));
   });
 }
 

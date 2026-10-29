@@ -87,8 +87,10 @@ export async function markNotificationRead(userId, notificationId) {
 }
 
 /**
- * Create reminders for recurring payments due within the next 3 days.
- * Paid cycles and duplicate reminders are excluded.
+ * Create reminders for recurring payments due within the next 3 days, and a
+ * follow-up for a payment whose due date has passed without being marked paid
+ * (UC-07 10a-10b). Paid cycles and duplicate reminders are excluded, so each
+ * cycle gets at most one reminder and one follow-up.
  */
 export async function createPaymentReminders(userId, today) {
   return withUser(userId, async (db) => {
@@ -122,6 +124,45 @@ export async function createPaymentReminders(userId, today) {
           `Payment of ${payment.amount} is due on ${payment.due_date}.`,
           dedupeKey,
         ],
+      );
+
+      if (result.rows[0]) {
+        created.push(result.rows[0]);
+      }
+    }
+
+    // Only the latest unpaid cycle of each payment gets a follow-up, so a
+    // payment added with an old start date does not flood the list.
+    const { rows: overdue } = await db.query(
+      `SELECT r.id, r.amount, c.name AS category_name,
+              MAX(e.spent_on)::text AS due_date
+       FROM recurring_expenses r
+       JOIN categories c ON c.id = r.category_id
+       JOIN expenses e
+         ON e.recurring_expense_id = r.id AND e.user_id = r.user_id
+       WHERE r.user_id = $1
+         AND r.is_active = true
+         AND e.spent_on < $2::date
+         AND (r.last_paid_due_date IS NULL
+              OR e.spent_on > r.last_paid_due_date)
+       GROUP BY r.id, r.amount, c.name
+       ORDER BY MAX(e.spent_on) ASC`,
+      [userId, today],
+    );
+
+    for (const payment of overdue) {
+      const dedupeKey = `payment-overdue:${payment.id}:${payment.due_date}`;
+      const message = `Overdue: your ${payment.category_name} payment of `
+        + `${payment.amount} was due on ${payment.due_date}. `
+        + 'Mark it as paid to stop these reminders.';
+
+      const result = await db.query(
+        `INSERT INTO notifications
+           (user_id, type, message, dedupe_key)
+         VALUES ($1, 'payment_overdue', $2, $3)
+         ON CONFLICT (user_id, dedupe_key) DO NOTHING
+         RETURNING id, type, message, is_read, created_at`,
+        [userId, message.slice(0, 255), dedupeKey],
       );
 
       if (result.rows[0]) {
