@@ -1,41 +1,68 @@
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import './spending-charts.css';
 
 const COLORS = [
-  '#4776e6',
-  '#25b8a8',
-  '#f2a93b',
-  '#e66b61',
-  '#9a78d0',
-  '#3d9bd9',
-  '#d75a9e',
-  '#7b8794',
+  '#3984f7',
+  '#ff5b79',
+  '#ffbd35',
+  '#24c7a5',
+  '#a879ed',
+  '#ff8a42',
+  '#23b8d9',
+  '#8492a6',
 ];
 
-const WIDTH = 640;
-const HEIGHT = 260;
-const LEFT = 76;
-const RIGHT = 24;
-const TOP = 24;
-const BOTTOM = 40;
-
-function currency(value, compact = false) {
-  return new Intl.NumberFormat('en-IN', {
+const money = (value) =>
+  new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0,
-    ...(compact
-      ? { notation: 'compact', compactDisplay: 'short' }
-      : {}),
   }).format(Number(value) || 0);
+
+const compactMoney = (value) =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(Number(value) || 0);
+
+function localDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
 }
 
-function getAmount(expense) {
+function monthKey(date) {
+  return date.slice(0, 7);
+}
+
+function monthLabel(key, long = false) {
+  const [year, month] = key.split('-').map(Number);
+
+  if (!year || !month || month < 1 || month > 12) {
+    return key;
+  }
+
+  return new Date(year, month - 1, 1).toLocaleDateString('en-IN', {
+    month: long ? 'long' : 'short',
+    year: 'numeric',
+  });
+}
+
+function expenseAmount(expense) {
   const amount = Number(expense.amount);
   return Number.isFinite(amount) && amount > 0 ? amount : 0;
 }
 
-function getCategoryName(expense, categories) {
+function expenseDate(expense) {
+  return String(expense.spent_on || '').slice(0, 10);
+}
+
+function categoryName(expense, categories) {
   const category = categories.find(
     (item) => String(item.id) === String(expense.category_id),
   );
@@ -43,620 +70,388 @@ function getCategoryName(expense, categories) {
   return expense.category_name || category?.name || 'Uncategorized';
 }
 
-function getMonthKey(date) {
-  return String(date ?? '').slice(0, 7);
-}
+function getPeriodRange(period, selectedMonth, customStart, customEnd) {
+  const today = new Date();
+  const todayKey = localDateKey(today);
 
-function formatMonth(key, options = { month: 'short' }) {
-  const [year, month] = key.split('-').map(Number);
-
-  if (!year || !month) return key;
-
-  return new Date(year, month - 1, 1).toLocaleDateString(
-    'en-IN',
-    options,
-  );
-}
-
-// Draw a smooth curve through the supplied points.
-function smoothPath(points) {
-  if (!points.length) return '';
-
-  if (points.length === 1) {
-    return `M ${points[0].x} ${points[0].y}`;
+  if (period === 'custom') {
+    return { start: customStart, end: customEnd };
   }
 
-  let path = `M ${points[0].x} ${points[0].y}`;
-
-  for (let i = 1; i < points.length; i += 1) {
-    const previous = points[i - 1];
-    const current = points[i];
-    const middleX = (previous.x + current.x) / 2;
-
-    path += ` C ${middleX} ${previous.y}, ${middleX} ${current.y}, ${current.x} ${current.y}`;
-  }
-
-  return path;
-}
-
-function ChartGrid({ max, plotHeight }) {
-  return [0, 0.5, 1].map((fraction) => {
-    const y = TOP + plotHeight * fraction;
-    const value = max * (1 - fraction);
-
-    return (
-      <g key={fraction}>
-        <line
-          x1={LEFT}
-          y1={y}
-          x2={WIDTH - RIGHT}
-          y2={y}
-          className="chart-grid-line"
-        />
-
-        <text
-          x={LEFT - 10}
-          y={y + 4}
-          textAnchor="end"
-          className="chart-axis-label"
-        >
-          {currency(value, true)}
-        </text>
-      </g>
-    );
-  });
-}
-
-// STORY #40: Daily spending trend
-function SpendingTrend({ expenses, month }) {
-  const days = useMemo(() => {
-    const [year, monthNumber] = String(month || '')
+  if (period === 'month') {
+    const [year, month] = String(selectedMonth || '')
       .split('-')
       .map(Number);
 
-    if (
-      !Number.isInteger(year) ||
-      !Number.isInteger(monthNumber) ||
-      monthNumber < 1 ||
-      monthNumber > 12
-    ) {
-      return [];
+    if (!year || !month || month < 1 || month > 12) {
+      return { start: '', end: '' };
     }
 
-    const dayCount = new Date(year, monthNumber, 0).getDate();
-    const totals = Array(dayCount).fill(0);
+    return {
+      start: `${year}-${String(month).padStart(2, '0')}-01`,
+      end: localDateKey(new Date(year, month, 0)),
+    };
+  }
 
-    expenses.forEach((expense) => {
-      const date = String(expense.spent_on ?? '').slice(0, 10);
-      const [expenseYear, expenseMonth, day] = date
-        .split('-')
-        .map(Number);
+  if (period === '3months' || period === '6months') {
+    const count = period === '3months' ? 3 : 6;
+    const start = new Date(today.getFullYear(), today.getMonth() - count + 1, 1);
 
-      if (
-        expenseYear === year &&
-        expenseMonth === monthNumber &&
-        day >= 1 &&
-        day <= dayCount
-      ) {
-        totals[day - 1] += getAmount(expense);
-      }
-    });
+    return {
+      start: localDateKey(start),
+      end: todayKey,
+    };
+  }
 
-    return totals.map((amount, index) => ({
-      day: index + 1,
-      amount,
-    }));
-  }, [expenses, month]);
+  if (period === 'year') {
+    return {
+      start: `${today.getFullYear()}-01-01`,
+      end: todayKey,
+    };
+  }
 
-  const total = days.reduce((sum, day) => sum + day.amount, 0);
-  const activeDays = days.filter((day) => day.amount > 0).length;
-  const average = activeDays ? total / activeDays : 0;
-  const highestDay = days.reduce(
-    (best, day) => (day.amount > best.amount ? day : best),
-    { day: 0, amount: 0 },
+  return { start: '', end: '' };
+}
+
+function buildMonthlyData(expenses, start, end) {
+  if (!start || !end || start > end) return [];
+
+  const startDate = new Date(
+    Number(start.slice(0, 4)),
+    Number(start.slice(5, 7)) - 1,
+    1,
+  );
+  const endDate = new Date(
+    Number(end.slice(0, 4)),
+    Number(end.slice(5, 7)) - 1,
+    1,
   );
 
-  const max = Math.max(1, ...days.map((day) => day.amount));
-  const plotWidth = WIDTH - LEFT - RIGHT;
-  const plotHeight = HEIGHT - TOP - BOTTOM;
+  const months = [];
+  const cursor = new Date(startDate);
 
-  const points = days.map((item, index) => ({
+  while (cursor <= endDate && months.length < 120) {
+    const key = `${cursor.getFullYear()}-${String(
+      cursor.getMonth() + 1,
+    ).padStart(2, '0')}`;
+
+    months.push({ key, label: monthLabel(key), total: 0 });
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  const totals = new Map(months.map((item) => [item.key, 0]));
+
+  expenses.forEach((expense) => {
+    const key = monthKey(expenseDate(expense));
+    if (!totals.has(key)) return;
+
+    totals.set(key, totals.get(key) + expenseAmount(expense));
+  });
+
+  return months.map((item) => ({
     ...item,
-    x: LEFT + (index / Math.max(days.length - 1, 1)) * plotWidth,
-    y:
-      TOP +
-      plotHeight -
-      (item.amount / max) * plotHeight,
+    total: totals.get(item.key) || 0,
   }));
+}
 
-  const line = smoothPath(points);
-
-  const area = points.length
-    ? `${line} L ${points[points.length - 1].x} ${
-        TOP + plotHeight
-      } L ${points[0].x} ${TOP + plotHeight} Z`
-    : '';
-
-  const labelDays = days.length
-    ? [...new Set([1, 5, 10, 15, 20, 25, days.length])]
-        .filter((day) => day <= days.length)
-    : [];
-
+function ChartCard({ eyebrow, title, subtitle, children, className = '' }) {
   return (
-    <section
-      className="chart-card"
-      aria-labelledby="spending-trend-title"
-    >
-      <div className="chart-heading-row">
+    <section className={`analytics-card ${className}`}>
+      <div className="analytics-card-heading">
         <div>
-          <p className="chart-kicker">DAILY ACTIVITY</p>
-          <h2 id="spending-trend-title">
-            Daily spending trend
-          </h2>
-          <p className="muted">
-            Spending throughout{' '}
-            {formatMonth(month, {
-              month: 'long',
-              year: 'numeric',
-            })}
-          </p>
-        </div>
-
-        <span className="chart-icon-badge" aria-hidden="true">
-          ↗
-        </span>
-      </div>
-
-      <div className="chart-stat-strip">
-        <div>
-          <span className="chart-stat-label">Monthly total</span>
-          <strong>{currency(total)}</strong>
-        </div>
-
-        <div>
-          <span className="chart-stat-label">Daily average*</span>
-          <strong>{currency(average)}</strong>
-        </div>
-
-        <div>
-          <span className="chart-stat-label">Active days</span>
-          <strong>{activeDays}</strong>
+          <p className="analytics-eyebrow">{eyebrow}</p>
+          <h2>{title}</h2>
+          <p className="analytics-subtitle">{subtitle}</p>
         </div>
       </div>
-
-      {days.length === 0 || activeDays === 0 ? (
-        <p className="chart-empty">
-          No expenses recorded for this month yet.
-        </p>
-      ) : (
-        <div className="chart-scroll">
-          <svg
-            className="trend-chart enhanced-chart"
-            viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-            role="img"
-            aria-label={`Daily spending trend for ${month}`}
-          >
-            <defs>
-              <linearGradient
-                id="dailyAreaGradient"
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop
-                  offset="0%"
-                  stopColor="#4776e6"
-                  stopOpacity=".28"
-                />
-                <stop
-                  offset="100%"
-                  stopColor="#4776e6"
-                  stopOpacity=".015"
-                />
-              </linearGradient>
-            </defs>
-
-            <ChartGrid max={max} plotHeight={plotHeight} />
-
-            <path d={area} fill="url(#dailyAreaGradient)" />
-
-            <path
-              d={line}
-              className="trend-line enhanced-trend-line"
-            />
-
-            {points
-              .filter((point) => point.amount > 0)
-              .map((point) => (
-                <circle
-                  key={point.day}
-                  cx={point.x}
-                  cy={point.y}
-                  r="4"
-                  className="trend-point enhanced-trend-point"
-                >
-                  <title>
-                    {`${month}-${String(point.day).padStart(2, '0')}: ${currency(point.amount)}`}
-                  </title>
-                </circle>
-              ))}
-
-            {labelDays.map((day) => (
-              <text
-                key={day}
-                x={points[day - 1].x}
-                y={HEIGHT - 9}
-                textAnchor="middle"
-                className="chart-axis-label"
-              >
-                {day}
-              </text>
-            ))}
-          </svg>
-        </div>
-      )}
-
-      <p className="chart-footnote">
-        *Average across days with recorded spending.
-        {highestDay.amount > 0
-          ? ` Highest: ${currency(highestDay.amount)} on day ${highestDay.day}.`
-          : ''}
-      </p>
+      {children}
     </section>
   );
 }
 
-// STORY #41: Spending by category
-function CategorySplit({ expenses, categories }) {
-  const totals = useMemo(() => {
-    const grouped = new Map();
+function MonthlyBarChart({ data }) {
+  const width = 640;
+  const height = 290;
+  const left = 76;
+  const right = 20;
+  const top = 25;
+  const bottom = 52;
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
+  const max = Math.max(1, ...data.map((item) => item.total));
+  const slot = plotWidth / Math.max(data.length, 1);
+  const barWidth = Math.min(46, slot * 0.58);
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+
+  if (!data.length) {
+    return <p className="analytics-empty">No monthly data for this period.</p>;
+  }
+
+  return (
+    <div className="analytics-svg-scroll">
+      <svg
+        className="analytics-svg"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="Monthly expense totals shown as a bar chart"
+      >
+        {ticks.map((fraction) => {
+          const y = top + plotHeight * (1 - fraction);
+
+          return (
+            <g key={fraction}>
+              <line
+                x1={left}
+                x2={width - right}
+                y1={y}
+                y2={y}
+                className="analytics-grid-line"
+              />
+              <text
+                x={left - 10}
+                y={y + 4}
+                textAnchor="end"
+                className="analytics-axis-label"
+              >
+                {compactMoney(max * fraction)}
+              </text>
+            </g>
+          );
+        })}
+
+        {data.map((item, index) => {
+          const barHeight = (item.total / max) * plotHeight;
+          const x = left + index * slot + (slot - barWidth) / 2;
+          const y = top + plotHeight - barHeight;
+
+          return (
+            <g key={item.key}>
+              <rect
+                x={x}
+                y={y}
+                width={barWidth}
+                height={Math.max(barHeight, 0)}
+                rx="7"
+                fill={COLORS[index % COLORS.length]}
+                className="analytics-bar"
+              >
+                <title>{`${monthLabel(item.key, true)}: ${money(item.total)}`}</title>
+              </rect>
+
+              {data.length <= 12 && item.total > 0 && (
+                <text
+                  x={x + barWidth / 2}
+                  y={Math.max(top + 12, y - 7)}
+                  textAnchor="middle"
+                  className="analytics-value-label"
+                >
+                  {compactMoney(item.total)}
+                </text>
+              )}
+
+              <text
+                x={x + barWidth / 2}
+                y={height - 17}
+                textAnchor="middle"
+                className="analytics-axis-label"
+              >
+                {item.label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function MonthlyLineChart({ data }) {
+  const width = 640;
+  const height = 290;
+  const left = 76;
+  const right = 20;
+  const top = 25;
+  const bottom = 52;
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
+  const max = Math.max(1, ...data.map((item) => item.total));
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+
+  const points = data.map((item, index) => ({
+    ...item,
+    x: left + ((index + 0.5) / Math.max(data.length, 1)) * plotWidth,
+    y: top + plotHeight - (item.total / max) * plotHeight,
+  }));
+
+  const linePath = points
+    .map((point, index) =>
+      `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`,
+    )
+    .join(' ');
+
+  const areaPath = points.length
+    ? `${linePath} L ${points[points.length - 1].x} ${
+        top + plotHeight
+      } L ${points[0].x} ${top + plotHeight} Z`
+    : '';
+
+  if (!data.length) {
+    return <p className="analytics-empty">No trend data for this period.</p>;
+  }
+
+  return (
+    <div className="analytics-svg-scroll">
+      <svg
+        className="analytics-svg"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="Monthly expense totals shown as a line chart"
+      >
+        <defs>
+          <linearGradient id="monthlyLineFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3984f7" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#3984f7" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+
+        {ticks.map((fraction) => {
+          const y = top + plotHeight * (1 - fraction);
+
+          return (
+            <g key={fraction}>
+              <line
+                x1={left}
+                x2={width - right}
+                y1={y}
+                y2={y}
+                className="analytics-grid-line"
+              />
+              <text
+                x={left - 10}
+                y={y + 4}
+                textAnchor="end"
+                className="analytics-axis-label"
+              >
+                {compactMoney(max * fraction)}
+              </text>
+            </g>
+          );
+        })}
+
+        {points.length > 1 && <path d={areaPath} fill="url(#monthlyLineFill)" />}
+
+        {points.length > 1 && (
+          <path d={linePath} className="analytics-line-path" />
+        )}
+
+        {points.map((point) => (
+          <g key={point.key}>
+            <circle
+              cx={point.x}
+              cy={point.y}
+              r="5"
+              className="analytics-line-point"
+            >
+              <title>{`${monthLabel(point.key, true)}: ${money(point.total)}`}</title>
+            </circle>
+
+            {data.length <= 12 && point.total > 0 && (
+              <text
+                x={point.x}
+                y={Math.max(top + 12, point.y - 12)}
+                textAnchor="middle"
+                className="analytics-value-label"
+              >
+                {compactMoney(point.total)}
+              </text>
+            )}
+
+            <text
+              x={point.x}
+              y={height - 17}
+              textAnchor="middle"
+              className="analytics-axis-label"
+            >
+              {point.label}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function CategoryPieChart({ expenses, categories }) {
+  const categoryData = useMemo(() => {
+    const totals = new Map();
 
     expenses.forEach((expense) => {
-      const amount = getAmount(expense);
-
+      const amount = expenseAmount(expense);
       if (amount <= 0) return;
 
-      const name = getCategoryName(expense, categories);
-
-      grouped.set(name, (grouped.get(name) || 0) + amount);
+      const name = categoryName(expense, categories);
+      totals.set(name, (totals.get(name) || 0) + amount);
     });
 
-    return [...grouped.entries()]
+    return [...totals.entries()]
       .map(([name, amount]) => ({ name, amount }))
       .sort((a, b) => b.amount - a.amount);
   }, [expenses, categories]);
 
-  const total = totals.reduce(
-    (sum, item) => sum + item.amount,
-    0,
-  );
+  const total = categoryData.reduce((sum, item) => sum + item.amount, 0);
 
   const gradient = useMemo(() => {
-    if (total <= 0) return 'transparent';
+    if (!total) return '#edf1f7';
 
-    let accumulated = 0;
+    let start = 0;
 
-    return totals
+    return categoryData
       .map((item, index) => {
-        const start = accumulated;
-        accumulated += (item.amount / total) * 100;
-
-        return `${COLORS[index % COLORS.length]} ${start}% ${accumulated}%`;
+        const end = start + (item.amount / total) * 100;
+        const segment = `${COLORS[index % COLORS.length]} ${start}% ${end}%`;
+        start = end;
+        return segment;
       })
       .join(', ');
-  }, [totals, total]);
+  }, [categoryData, total]);
 
   return (
-    <section
-      className="chart-card"
-      aria-labelledby="category-split-title"
-    >
-      <div className="chart-heading-row">
-        <div>
-          <p className="chart-kicker">WHERE IT GOES</p>
-          <h2 id="category-split-title">
-            Spending by category
-          </h2>
-          <p className="muted">
-            How your expenses are distributed
-          </p>
-        </div>
-
-        <span
-          className="chart-icon-badge chart-icon-teal"
-          aria-hidden="true"
-        >
-          ◔
-        </span>
-      </div>
-
-      {totals.length === 0 || total <= 0 ? (
-        <p className="chart-empty">
-          Add expenses to see your category breakdown.
-        </p>
+    <>
+      {!categoryData.length || total <= 0 ? (
+        <p className="analytics-empty">Add expenses to see the category breakdown.</p>
       ) : (
-        <div className="donut-layout">
-          <div className="donut-wrap">
-            <div
-              className="category-donut"
-              role="img"
-              aria-label={`Category breakdown of ${currency(total)}`}
-              style={{
-                background: `conic-gradient(${gradient})`,
-              }}
-            >
-              <div className="donut-hole">
-                <span>Total spent</span>
-                <strong>{currency(total)}</strong>
-                <small>
-                  {totals.length}{' '}
-                  {totals.length === 1 ? 'category' : 'categories'}
-                </small>
-              </div>
+        <div className="analytics-donut-layout">
+          <div
+            className="analytics-donut"
+            style={{ background: `conic-gradient(${gradient})` }}
+            role="img"
+            aria-label={`Expense category breakdown, total ${money(total)}`}
+          >
+            <div className="analytics-donut-hole">
+              <span>Total spent</span>
+              <strong>{money(total)}</strong>
+              <small>{categoryData.length} categories</small>
             </div>
           </div>
 
-          <ul className="category-legend enhanced-legend">
-            {totals.map((item, index) => (
+          <ul className="analytics-legend">
+            {categoryData.map((item, index) => (
               <li key={item.name}>
                 <span
-                  className="category-swatch"
-                  style={{
-                    backgroundColor:
-                      COLORS[index % COLORS.length],
-                  }}
+                  className="analytics-legend-dot"
+                  style={{ backgroundColor: COLORS[index % COLORS.length] }}
                 />
-
-                <span className="category-name">
-                  {item.name}
-                </span>
-
-                <span className="category-amount">
-                  {currency(item.amount)}
-                  <small>
-                    {((item.amount / total) * 100).toFixed(1)}%
-                  </small>
+                <span className="analytics-legend-name">{item.name}</span>
+                <span className="analytics-legend-value">
+                  {money(item.amount)}
+                  <small>{((item.amount / total) * 100).toFixed(1)}%</small>
                 </span>
               </li>
             ))}
           </ul>
         </div>
       )}
-
-      <p className="chart-footnote">
-        Based on recorded expenses for the selected month.
-      </p>
-    </section>
-  );
-}
-
-// Additional chart: historical monthly spending by category
-function MonthlySpending({ expenses, categories, month }) {
-  const data = useMemo(() => {
-    const [year, monthNumber] = String(month || '')
-      .split('-')
-      .map(Number);
-
-    if (!year || !monthNumber) {
-      return { months: [], series: [] };
-    }
-
-    const months = [];
-
-    for (let offset = 5; offset >= 0; offset -= 1) {
-      const date = new Date(
-        year,
-        monthNumber - 1 - offset,
-        1,
-      );
-
-      months.push(
-        `${date.getFullYear()}-${String(
-          date.getMonth() + 1,
-        ).padStart(2, '0')}`,
-      );
-    }
-
-    const grouped = new Map();
-
-    expenses.forEach((expense) => {
-      const key = getMonthKey(expense.spent_on);
-      const amount = getAmount(expense);
-
-      if (!months.includes(key) || amount <= 0) return;
-
-      const name = getCategoryName(expense, categories);
-
-      if (!grouped.has(name)) {
-        grouped.set(name, new Map());
-      }
-
-      const values = grouped.get(name);
-      values.set(key, (values.get(key) || 0) + amount);
-    });
-
-    const ranked = [...grouped.entries()]
-      .map(([name, values]) => ({
-        name,
-        values: months.map((key) => values.get(key) || 0),
-        total: [...values.values()].reduce(
-          (sum, value) => sum + value,
-          0,
-        ),
-      }))
-      .sort((a, b) => b.total - a.total);
-
-    const series = ranked.slice(0, 4);
-
-    if (ranked.length > 4) {
-      series.push({
-        name: 'Other categories',
-        values: months.map((_, index) =>
-          ranked.slice(4).reduce(
-            (sum, item) => sum + item.values[index],
-            0,
-          ),
-        ),
-      });
-    }
-
-    return { months, series };
-  }, [expenses, categories, month]);
-
-  const { months, series } = data;
-
-  const max = Math.max(
-    1,
-    ...series.flatMap((item) => item.values),
-  );
-
-  const plotWidth = WIDTH - LEFT - RIGHT;
-  const plotHeight = HEIGHT - TOP - BOTTOM;
-
-  const xAt = (index) =>
-    LEFT +
-    (index / Math.max(months.length - 1, 1)) * plotWidth;
-
-  const selectedTotal = expenses
-    .filter(
-      (expense) =>
-        getMonthKey(expense.spent_on) === month,
-    )
-    .reduce((sum, expense) => sum + getAmount(expense), 0);
-
-  return (
-    <section
-      className="chart-card monthly-card"
-      aria-labelledby="monthly-spending-title"
-    >
-      <div className="chart-heading-row">
-        <div>
-          <p className="chart-kicker">OVER TIME</p>
-          <h2 id="monthly-spending-title">
-            Monthly spending
-          </h2>
-          <p className="muted">
-            Category trends across the last six months
-          </p>
-        </div>
-
-        <span className="monthly-total-pill">
-          {currency(selectedTotal)}
-          <small>Selected month</small>
-        </span>
-      </div>
-
-      {!series.some((item) =>
-        item.values.some((value) => value > 0),
-      ) ? (
-        <p className="chart-empty monthly-empty">
-          Add expenses across months to see your spending history.
-        </p>
-      ) : (
-        <>
-          <div className="chart-scroll">
-            <svg
-              className="trend-chart monthly-trend-chart"
-              viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-              role="img"
-              aria-label="Monthly spending by category over the last six months"
-            >
-              <ChartGrid max={max} plotHeight={plotHeight} />
-
-              {series.map((item, index) => {
-                const points = item.values.map(
-                  (value, pointIndex) => ({
-                    x: xAt(pointIndex),
-                    y:
-                      TOP +
-                      plotHeight -
-                      (value / max) * plotHeight,
-                    value,
-                    month: months[pointIndex],
-                  }),
-                );
-
-                const line = smoothPath(points);
-
-                const area = `${line} L ${
-                  points[points.length - 1].x
-                } ${TOP + plotHeight} L ${
-                  points[0].x
-                } ${TOP + plotHeight} Z`;
-
-                return (
-                  <g key={item.name}>
-                    <path
-                      d={area}
-                      fill={COLORS[index % COLORS.length]}
-                      opacity=".07"
-                    />
-
-                    <path
-                      d={line}
-                      fill="none"
-                      stroke={COLORS[index % COLORS.length]}
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-
-                    {points.map((point) => (
-                      <circle
-                        key={point.month}
-                        cx={point.x}
-                        cy={point.y}
-                        r={point.value > 0 ? 3.5 : 2}
-                        fill={COLORS[index % COLORS.length]}
-                        stroke="#fff"
-                        strokeWidth="1"
-                      >
-                        <title>
-                          {`${item.name} · ${formatMonth(
-                            point.month,
-                            {
-                              month: 'long',
-                              year: 'numeric',
-                            },
-                          )}: ${currency(point.value)}`}
-                        </title>
-                      </circle>
-                    ))}
-                  </g>
-                );
-              })}
-
-              {months.map((key, index) => (
-                <text
-                  key={key}
-                  x={xAt(index)}
-                  y={HEIGHT - 9}
-                  textAnchor="middle"
-                  className="chart-axis-label"
-                >
-                  {formatMonth(key)}
-                </text>
-              ))}
-            </svg>
-          </div>
-
-          <div className="monthly-legend">
-            {series.map((item, index) => (
-              <span key={item.name}>
-                <i
-                  style={{
-                    backgroundColor:
-                      COLORS[index % COLORS.length],
-                  }}
-                />
-                {item.name}
-              </span>
-            ))}
-          </div>
-        </>
-      )}
-    </section>
+    </>
   );
 }
 
@@ -666,23 +461,238 @@ export default function SpendingCharts({
   month,
   categories = [],
 }) {
+  const [period, setPeriod] = useState('month');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+
+  const today = localDateKey(new Date());
+
+  const range = getPeriodRange(
+    period,
+    month,
+    customStart,
+    customEnd,
+  );
+
+  const validRange =
+    Boolean(range.start && range.end) &&
+    range.start <= range.end &&
+    range.end <= today;
+
+  // Use the same filtered records for the totals and every chart.
+  const filteredExpenses = useMemo(() => {
+    if (!validRange) return [];
+
+    return allExpenses.filter((expense) => {
+      const date = expenseDate(expense);
+
+      return (
+        date >= range.start &&
+        date <= range.end &&
+        expenseAmount(expense) > 0
+      );
+    });
+  }, [allExpenses, range.start, range.end, validRange]);
+
+  const total = filteredExpenses.reduce(
+    (sum, expense) => sum + expenseAmount(expense),
+    0,
+  );
+
+  const monthlyData = useMemo(
+    () => buildMonthlyData(filteredExpenses, range.start, range.end),
+    [filteredExpenses, range.start, range.end],
+  );
+
+  const recordCount = filteredExpenses.length;
+  const average = monthlyData.length ? total / monthlyData.length : 0;
+
   return (
-    <div className="spending-charts enhanced-spending-charts">
-      <SpendingTrend
-        expenses={expenses}
-        month={month}
-      />
+    <div className="spending-analytics">
+      <section className="analytics-filter-card">
+        <div>
+          <p className="analytics-eyebrow">YOUR MONEY AT A GLANCE</p>
+          <h2>Spending analytics</h2>
+          <p className="analytics-subtitle">
+            Explore your expenses and understand where your money goes.
+          </p>
+        </div>
 
-      <CategorySplit
-        expenses={expenses}
-        categories={categories}
-      />
+        <div className="analytics-period-controls">
+          <label htmlFor="analytics-period">Financial period</label>
+          <select
+            id="analytics-period"
+            value={period}
+            onChange={(event) => setPeriod(event.target.value)}
+          >
+            <option value="month">Selected month</option>
+            <option value="3months">Last 3 months</option>
+            <option value="6months">Last 6 months</option>
+            <option value="year">This year</option>
+            <option value="custom">Custom date range</option>
+          </select>
+        </div>
 
-      <MonthlySpending
-        expenses={allExpenses}
-        categories={categories}
-        month={month}
-      />
+        {period === 'custom' && (
+          <div className="analytics-custom-range">
+            <label>
+              Start date
+              <input
+                type="date"
+                value={customStart}
+                max={customEnd || today}
+                onChange={(event) => setCustomStart(event.target.value)}
+              />
+            </label>
+
+            <label>
+              End date
+              <input
+                type="date"
+                value={customEnd}
+                min={customStart || undefined}
+                max={today}
+                onChange={(event) => setCustomEnd(event.target.value)}
+              />
+            </label>
+          </div>
+        )}
+
+        {period === 'custom' && !validRange && (
+          <p className="analytics-error" role="alert">
+            Choose a valid start date and end date. Future dates are not allowed.
+          </p>
+        )}
+
+        {validRange && (
+          <p className="analytics-range-note">
+            {range.start} to {range.end}
+          </p>
+        )}
+      </section>
+
+      {validRange && (
+        <>
+          <div className="analytics-summary-grid">
+            <article className="analytics-summary-card">
+              <span className="analytics-summary-icon blue">₹</span>
+              <div>
+                <p>Total expenses</p>
+                <strong>{money(total)}</strong>
+                <small>Across the selected period</small>
+              </div>
+            </article>
+
+            <article className="analytics-summary-card">
+              <span className="analytics-summary-icon purple">▤</span>
+              <div>
+                <p>Expense records</p>
+                <strong>{recordCount}</strong>
+                <small>Recorded transactions</small>
+              </div>
+            </article>
+
+            <article className="analytics-summary-card">
+              <span className="analytics-summary-icon teal">↗</span>
+              <div>
+                <p>Monthly average</p>
+                <strong>{money(average)}</strong>
+                <small>Average across months shown</small>
+              </div>
+            </article>
+          </div>
+
+          <div className="analytics-chart-grid">
+            <ChartCard
+              eyebrow="COMPARE YOUR SPENDING"
+              title="Monthly expense comparison"
+              subtitle="Compare total expenses across the selected period"
+            >
+              <MonthlyBarChart data={monthlyData} />
+            </ChartCard>
+
+            <ChartCard
+              eyebrow="WHERE IT GOES"
+              title="Expense breakdown by category"
+              subtitle="Share of total spending by category"
+            >
+              <CategoryPieChart
+                expenses={filteredExpenses}
+                categories={categories}
+              />
+            </ChartCard>
+
+            <ChartCard
+              eyebrow="SPENDING OVER TIME"
+              title="Monthly spending trend"
+              subtitle="See how your monthly expenses change"
+            >
+              <MonthlyLineChart data={monthlyData} />
+            </ChartCard>
+
+            <ChartCard
+              eyebrow="TOP CATEGORIES"
+              title="Highest spending categories"
+              subtitle="Categories ranked by total amount"
+            >
+              <TopCategories
+                expenses={filteredExpenses}
+                categories={categories}
+              />
+            </ChartCard>
+          </div>
+        </>
+      )}
+
+      {!validRange && period !== 'custom' && (
+        <p className="analytics-empty">
+          Select a valid period to view your spending analytics.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TopCategories({ expenses, categories }) {
+  const items = useMemo(() => {
+    const totals = new Map();
+
+    expenses.forEach((expense) => {
+      const amount = expenseAmount(expense);
+      if (amount <= 0) return;
+
+      const name = categoryName(expense, categories);
+      totals.set(name, (totals.get(name) || 0) + amount);
+    });
+
+    return [...totals.entries()]
+      .map(([name, amount]) => ({ name, amount }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [expenses, categories]);
+
+  const max = Math.max(1, ...items.map((item) => item.amount));
+
+  if (!items.length) {
+    return <p className="analytics-empty">No category expenses in this period.</p>;
+  }
+
+  return (
+    <div className="analytics-top-categories">
+      {items.map((item, index) => (
+        <div className="analytics-top-row" key={item.name}>
+          <span className="analytics-top-name">{item.name}</span>
+          <div className="analytics-top-track">
+            <div
+              className="analytics-top-fill"
+              style={{
+                width: `${(item.amount / max) * 100}%`,
+                backgroundColor: COLORS[index % COLORS.length],
+              }}
+            />
+          </div>
+          <strong>{money(item.amount)}</strong>
+        </div>
+      ))}
     </div>
   );
 }
