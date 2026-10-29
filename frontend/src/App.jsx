@@ -54,6 +54,19 @@ async function apiRequest(url, options = {}) {
   return response.json();
 }
 
+// FR11: when a saved expense is far above the usual amount for its category,
+// say so and what the usual amount is, so the user can confirm or edit it.
+function unusualSpendingNotice(expense, successMessage) {
+  const anomaly = expense?.anomaly;
+
+  if (!anomaly?.isUnusual) return successMessage;
+
+  return `${successMessage} It is more than 3 times your usual spending in `
+    + `this category (about ${formatCurrency(anomaly.averageAmount)}), so it `
+    + 'is marked for review. Edit it if the amount is wrong, or mark it as '
+    + 'reviewed if it is correct.';
+}
+
 function formatCurrency(amount) {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -575,7 +588,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
 
     try {
       if (editingId) {
-        await apiRequest(
+        const result = await apiRequest(
           `/api/expenses/${encodeURIComponent(editingId)}`,
           {
             method: 'PUT',
@@ -583,14 +596,18 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
           },
         );
 
-        setMessage('Expense updated successfully.');
+        setMessage(
+          unusualSpendingNotice(result.expense, 'Expense updated successfully.'),
+        );
       } else {
-        await apiRequest('/api/expenses', {
+        const result = await apiRequest('/api/expenses', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
 
-        setMessage('Expense added successfully.');
+        setMessage(
+          unusualSpendingNotice(result.expense, 'Expense added successfully.'),
+        );
       }
 
       setEditingId(null);
@@ -742,7 +759,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
         }),
       });
 
-      const result = await apiRequest('/api/recurring-expenses');
+      const result = await apiRequest(`/api/recurring-expenses?today=${localToday()}`);
       setRecurringExpenses(result.recurringExpenses || []);
       setRecurringForm({
         category_id: '',
@@ -1568,7 +1585,8 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
       )}
       {expense.is_flagged && (
         <p className="expense-warning">
-          ⚠ Unusual spending detected
+          ⚠ Unusual spending detected. Edit it if the amount is wrong, or mark
+          it as reviewed if it is correct.
         </p>
       )}
     </td>
