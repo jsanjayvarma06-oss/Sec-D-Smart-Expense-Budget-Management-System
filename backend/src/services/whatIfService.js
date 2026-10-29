@@ -62,6 +62,12 @@ export async function simulateBudget(
   const remainingBudget = Math.round((budget - totalSpent) * 100) / 100;
   const savings = Math.round((income - totalSpent) * 100) / 100;
 
+  // The same forecast the dashboard shows (FR12), set against the proposed
+  // budget: would a typical month fit it? Null while there is too little history.
+  const forecastRemaining = forecast.available
+    ? Math.round((budget - forecast.forecast) * 100) / 100
+    : null;
+
   return {
     month,
     current_spending: totalSpent,
@@ -77,5 +83,9 @@ export async function simulateBudget(
     spending_forecast: forecast.forecast,
     forecast_available: forecast.available,
     forecast_reason: forecast.reason,
+    forecast_remaining_budget: forecastRemaining,
+    forecast_exceeds_budget: forecastRemaining === null
+      ? null
+      : forecastRemaining < 0,
   };
 }

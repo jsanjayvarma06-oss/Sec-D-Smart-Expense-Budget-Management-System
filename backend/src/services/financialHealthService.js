@@ -1,6 +1,12 @@
 
 import { withUser } from '../db/userScope.js';
 
+// Money is compared in whole paise so a boundary such as exactly 20% saved is
+// never missed by floating-point error (4.04 of 5.05 is 0.19999999999999996).
+function toPaise(amount) {
+  return Math.round(Number(amount) * 100);
+}
+
 export async function calculateFinancialHealth(userId, month) {
   if (
     typeof month !== 'string'
@@ -48,23 +54,28 @@ export async function calculateFinancialHealth(userId, month) {
     const expenses = Number(rows[0].total_expenses);
     const budget = Number(rows[0].overall_budget);
 
-    const savings = income - expenses;
-    const savingsRate = income > 0 ? savings / income : null;
-    const budgetUsage = budget > 0 ? expenses / budget : null;
+    const incomePaise = toPaise(income);
+    const expensesPaise = toPaise(expenses);
+    const budgetPaise = toPaise(budget);
+    const savingsPaise = incomePaise - expensesPaise;
+
+    const savings = savingsPaise / 100;
+    const savingsRate = incomePaise > 0 ? savingsPaise / incomePaise : null;
+    const budgetUsage = budgetPaise > 0 ? expensesPaise / budgetPaise : null;
 
     let score = 50;
     const reasons = [];
 
-    if (income <= 0) {
+    if (incomePaise <= 0) {
       score -= 10;
       reasons.push('No income was recorded for this month.');
-    } else if (savingsRate >= 0.20) {
+    } else if (savingsPaise * 100 >= 20 * incomePaise) {
       score += 30;
       reasons.push('You saved at least 20% of your income.');
-    } else if (savingsRate >= 0.10) {
+    } else if (savingsPaise * 100 >= 10 * incomePaise) {
       score += 20;
       reasons.push('You saved 10–19.99% of your income.');
-    } else if (savingsRate > 0) {
+    } else if (savingsPaise > 0) {
       score += 10;
       reasons.push('Your income exceeded your expenses.');
     } else {
@@ -72,13 +83,13 @@ export async function calculateFinancialHealth(userId, month) {
       reasons.push('Your expenses equalled or exceeded your income.');
     }
 
-    if (budget > 0 && budgetUsage <= 0.80) {
+    if (budgetPaise > 0 && expensesPaise * 100 <= 80 * budgetPaise) {
       score += 20;
       reasons.push('Spending stayed within 80% of your overall budget.');
-    } else if (budget > 0 && budgetUsage <= 1) {
+    } else if (budgetPaise > 0 && expensesPaise <= budgetPaise) {
       score += 10;
       reasons.push('Spending stayed within your overall budget.');
-    } else if (budget > 0) {
+    } else if (budgetPaise > 0) {
       score -= 15;
       reasons.push('Spending exceeded your overall budget.');
     } else {
@@ -104,7 +115,7 @@ export async function calculateFinancialHealth(userId, month) {
       rating,
       total_income: income,
       total_expenses: expenses,
-      savings: Math.round(savings * 100) / 100,
+      savings,
       savings_rate: savingsRate === null
         ? null
         : Math.round(savingsRate * 10000) / 100,

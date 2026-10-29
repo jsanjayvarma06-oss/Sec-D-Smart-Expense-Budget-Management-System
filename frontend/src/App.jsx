@@ -54,6 +54,19 @@ async function apiRequest(url, options = {}) {
   return response.json();
 }
 
+// FR11: when a saved expense is far above the usual amount for its category,
+// say so and what the usual amount is, so the user can confirm or edit it.
+function unusualSpendingNotice(expense, successMessage) {
+  const anomaly = expense?.anomaly;
+
+  if (!anomaly?.isUnusual) return successMessage;
+
+  return `${successMessage} It is more than 3 times your usual spending in `
+    + `this category (about ${formatCurrency(anomaly.averageAmount)}), so it `
+    + 'is marked for review. Edit it if the amount is wrong, or mark it as '
+    + 'reviewed if it is correct.';
+}
+
 function formatCurrency(amount) {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -356,6 +369,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
   const [budgetAlerts, setBudgetAlerts] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [financialHealth, setFinancialHealth] = useState(null);
+  const [forecast, setForecast] = useState(null);
   const [recurringExpenses, setRecurringExpenses] = useState([]);
   const [recurringForm, setRecurringForm] = useState({
     category_id: '',
@@ -387,20 +401,21 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
       setError('');
 
       try {
-        const [budgetResult, categoryResult, expenseResult, recurringResult, alertResult, healthResult] =
+        const [budgetResult, categoryResult, expenseResult, recurringResult, alertResult, healthResult, forecastResult] =
           await Promise.all([
             apiRequest(
               `/api/budgets/remaining?month=${encodeURIComponent(month)}`,
             ),
             apiRequest('/api/categories'),
             apiRequest('/api/expenses'),
-            apiRequest('/api/recurring-expenses'),
+            apiRequest(`/api/recurring-expenses?today=${localToday()}`),
             apiRequest(
               `/api/budgets/alerts?month=${encodeURIComponent(month)}`,
             ),
             apiRequest(
               `/api/financial-health?month=${encodeURIComponent(month)}`,
             ),
+            apiRequest('/api/forecast/monthly'),
           ]);
 
         if (!active) return;
@@ -411,6 +426,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
         setRecurringExpenses(recurringResult.recurringExpenses || []);
         setBudgetAlerts(alertResult.alerts || []);
         setFinancialHealth(healthResult.health || null);
+        setForecast(forecastResult.forecast || null);
 
         try {
           await apiRequest('/api/recurring-expenses/generate-due', {
@@ -418,7 +434,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
             body: JSON.stringify({ today: localToday() }),
           });
 
-          const recurringResult = await apiRequest('/api/recurring-expenses');
+          const recurringResult = await apiRequest(`/api/recurring-expenses?today=${localToday()}`);
           if (active) {
             setRecurringExpenses(recurringResult.recurringExpenses || []);
           }
@@ -575,7 +591,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
 
     try {
       if (editingId) {
-        await apiRequest(
+        const result = await apiRequest(
           `/api/expenses/${encodeURIComponent(editingId)}`,
           {
             method: 'PUT',
@@ -583,14 +599,18 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
           },
         );
 
-        setMessage('Expense updated successfully.');
+        setMessage(
+          unusualSpendingNotice(result.expense, 'Expense updated successfully.'),
+        );
       } else {
-        await apiRequest('/api/expenses', {
+        const result = await apiRequest('/api/expenses', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
 
-        setMessage('Expense added successfully.');
+        setMessage(
+          unusualSpendingNotice(result.expense, 'Expense added successfully.'),
+        );
       }
 
       setEditingId(null);
@@ -742,7 +762,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
         }),
       });
 
-      const result = await apiRequest('/api/recurring-expenses');
+      const result = await apiRequest(`/api/recurring-expenses?today=${localToday()}`);
       setRecurringExpenses(result.recurringExpenses || []);
       setRecurringForm({
         category_id: '',
@@ -820,7 +840,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
       });
 
       const [recurringResult, subscriptionResult] = await Promise.all([
-        apiRequest('/api/recurring-expenses'),
+        apiRequest(`/api/recurring-expenses?today=${localToday()}`),
         apiRequest(`/api/insights/subscriptions?today=${localToday()}`),
       ]);
       setRecurringExpenses(recurringResult.recurringExpenses || []);
@@ -830,6 +850,27 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
       setError(err.message || 'Could not create recurring payment.');
     } finally {
       setSubscriptionSaving('');
+    }
+  }
+
+  // UC-07: marking the unpaid cycle as paid stops its reminders.
+  async function handleMarkRecurringPaid(payment) {
+    setError('');
+    setMessage('');
+
+    try {
+      await apiRequest(
+        `/api/recurring-expenses/${encodeURIComponent(payment.id)}/pay`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ due_date: payment.unpaid_due_date }),
+        },
+      );
+
+      setMessage('Payment marked as paid. Its reminders have stopped.');
+      refreshData();
+    } catch (err) {
+      setError(err.message || 'Could not mark the payment as paid.');
     }
   }
 
@@ -1054,6 +1095,22 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
                 <p>Next due: {payment.next_due_date}</p>
                 {payment.note && <p>Note: {payment.note}</p>}
                 <p>Status: {payment.is_active ? 'Active' : 'Inactive'}</p>
+                {payment.unpaid_due_date && (
+                  <>
+                    <p className={payment.is_overdue ? 'expense-warning' : ''}>
+                      {payment.is_overdue ? 'Overdue: ' : 'Due today: '}
+                      {formatCurrency(payment.amount)} for{' '}
+                      {payment.unpaid_due_date} is not marked as paid.
+                    </p>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => handleMarkRecurringPaid(payment)}
+                    >
+                      Mark as paid
+                    </button>
+                  </>
+                )}
               </article>
             ))}
           </div>
@@ -1091,6 +1148,30 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
               )}
             </div>
           ))
+        )}
+      </section>
+
+      <section className="budget-alerts" aria-label="Monthly spending forecast">
+        <h2>Monthly Spending Forecast</h2>
+        {forecast?.available ? (
+          <>
+            <div className="summary-card">
+              <h2>{formatCurrency(forecast.forecast)}</h2>
+              <p>Expected spending in a typical month</p>
+            </div>
+            <p className="muted">
+              The average of your last {forecast.monthsOfHistory} complete
+              months of spending.
+            </p>
+          </>
+        ) : forecast ? (
+          <p className="muted">
+            {forecast.reason} You have {forecast.monthsOfHistory} so far. The
+            forecast appears once you have spending in each of the last 3
+            complete months.
+          </p>
+        ) : (
+          <p className="muted">The forecast is not available yet.</p>
         )}
       </section>
 
@@ -1568,7 +1649,8 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
       )}
       {expense.is_flagged && (
         <p className="expense-warning">
-          ⚠ Unusual spending detected
+          ⚠ Unusual spending detected. Edit it if the amount is wrong, or mark
+          it as reviewed if it is correct.
         </p>
       )}
     </td>

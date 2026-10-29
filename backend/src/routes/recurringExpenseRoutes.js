@@ -36,7 +36,11 @@ export function recurringExpenseRoutes() {
 
   router.get('/', async (req, res, next) => {
     try {
-      const recurringExpenses = await listRecurringExpenses(req.user.id);
+      // The browser sends its own date so "overdue" matches the user's day.
+      const today = req.query.today === undefined
+        ? undefined
+        : parseClientToday(req.query.today);
+      const recurringExpenses = await listRecurringExpenses(req.user.id, today);
       res.json({ recurringExpenses });
     } catch (err) {
       next(err);

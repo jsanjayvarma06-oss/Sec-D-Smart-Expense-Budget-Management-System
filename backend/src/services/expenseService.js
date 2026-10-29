@@ -106,6 +106,38 @@ export async function updateExpense(userId, expenseId, expense) {
 
     if (!categoryId) return null;
 
+    const { rows: current } = await db.query(
+      `SELECT amount, category_id, is_flagged
+       FROM expenses
+       WHERE id = $1 AND user_id = $2
+       FOR UPDATE`,
+      [expenseId, userId],
+    );
+
+    if (!current[0]) return null;
+
+    // Editing is the "fix it" half of the review flow: if the amount or
+    // category changed, check the expense again so a corrected typo clears the
+    // flag and a new large amount raises one. Edits to the note or date alone
+    // keep whatever the user already decided.
+    const changed = Math.round(Number(current[0].amount) * 100)
+        !== Math.round(Number(expense.amount) * 100)
+      || current[0].category_id !== categoryId;
+
+    let isFlagged = current[0].is_flagged;
+    let anomaly;
+
+    if (changed) {
+      anomaly = await detectUnusualSpending(
+        userId,
+        expense.amount,
+        categoryId,
+        db,
+        expenseId,
+      );
+      isFlagged = anomaly.isUnusual;
+    }
+
     const { rows } = await db.query(
       `UPDATE expenses
        SET category_id = $1,
@@ -113,8 +145,9 @@ export async function updateExpense(userId, expenseId, expense) {
            spent_on = $3::date,
            note = $4,
            merchant = $5,
+           is_flagged = $6,
            updated_at = now()
-       WHERE id = $6 AND user_id = $7
+       WHERE id = $7 AND user_id = $8
        RETURNING id, category_id, amount, spent_on, note, merchant,
                  is_flagged, created_at, updated_at`,
       [
@@ -123,12 +156,14 @@ export async function updateExpense(userId, expenseId, expense) {
         expense.spent_on,
         expense.note ?? null,
         expense.merchant ?? null,
+        isFlagged,
         expenseId,
         userId,
       ],
     );
 
-    return formatExpense(rows[0] ?? null);
+    const updated = formatExpense(rows[0] ?? null);
+    return updated && anomaly ? { ...updated, anomaly } : updated;
   });
 }
 

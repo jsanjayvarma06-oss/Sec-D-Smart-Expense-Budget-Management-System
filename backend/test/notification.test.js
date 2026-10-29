@@ -245,3 +245,175 @@ describe('Notification API', () => {
   });
 
 });
+
+describe('Overdue payments (UC-07 10a-10b)', () => {
+  function remind(cookie, today = day(0)) {
+    return request(app)
+      .post('/api/notifications/payment-reminders')
+      .set('Cookie', cookie)
+      .send({ today })
+      .expect(200);
+  }
+
+  function listRecurring(cookie, today = day(0)) {
+    return request(app)
+      .get(`/api/recurring-expenses?today=${today}`)
+      .set('Cookie', cookie)
+      .expect(200);
+  }
+
+  // A payment that fell due two days ago, with its expense already created.
+  async function missedPayment(user) {
+    const recurringId = await createRecurringExpense(user.id, day(-2));
+    await generateDueRecurringExpenses(user.id, day(0));
+    return recurringId;
+  }
+
+  test('a missed payment gets one follow-up, not one on every visit', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+    await missedPayment(user);
+
+    const first = await remind(cookie);
+    const second = await remind(cookie);
+
+    assert.equal(first.body.created_count, 1);
+    assert.equal(first.body.notifications[0].type, 'payment_overdue');
+    assert.match(first.body.notifications[0].message, new RegExp(day(-2)));
+    assert.equal(second.body.created_count, 0);
+  });
+
+  test('a payment that falls due today is not overdue yet', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+    await createRecurringExpense(user.id, day(0));
+    await generateDueRecurringExpenses(user.id, day(0));
+
+    const response = await remind(cookie);
+    const { recurringExpenses } = (await listRecurring(cookie)).body;
+
+    assert.equal(response.body.created_count, 0);
+    assert.equal(recurringExpenses[0].unpaid_due_date, day(0));
+    assert.equal(recurringExpenses[0].is_overdue, false);
+  });
+
+  test('the list marks a missed payment as overdue and names the date', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+    const recurringId = await missedPayment(user);
+
+    const { recurringExpenses } = (await listRecurring(cookie)).body;
+
+    assert.equal(recurringExpenses[0].id, recurringId);
+    assert.equal(recurringExpenses[0].is_overdue, true);
+    assert.equal(recurringExpenses[0].unpaid_due_date, day(-2));
+  });
+
+  test('marking it paid stops the follow-ups and the overdue mark', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+    const recurringId = await missedPayment(user);
+
+    await remind(cookie);
+
+    await request(app)
+      .patch(`/api/recurring-expenses/${recurringId}/pay`)
+      .set('Cookie', cookie)
+      .send({ due_date: day(-2) })
+      .expect(200);
+
+    const again = await remind(cookie);
+    const { recurringExpenses } = (await listRecurring(cookie)).body;
+
+    assert.equal(again.body.created_count, 0);
+    assert.equal(recurringExpenses[0].is_overdue, false);
+    assert.equal(recurringExpenses[0].unpaid_due_date, null);
+  });
+
+  test('paying marks that cycle\'s reminders as read', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+    const recurringId = await missedPayment(user);
+
+    await remind(cookie);
+
+    const before = await request(app)
+      .get('/api/notifications?unreadOnly=true')
+      .set('Cookie', cookie)
+      .expect(200);
+    assert.equal(before.body.notifications.length, 1);
+
+    await request(app)
+      .patch(`/api/recurring-expenses/${recurringId}/pay`)
+      .set('Cookie', cookie)
+      .send({ due_date: day(-2) })
+      .expect(200);
+
+    const after = await request(app)
+      .get('/api/notifications?unreadOnly=true')
+      .set('Cookie', cookie)
+      .expect(200);
+    assert.equal(after.body.notifications.length, 0);
+  });
+
+  test('a payment with several missed cycles gets one follow-up, for the latest', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+    const { rows: categories } = await query(
+      `INSERT INTO categories (user_id, name) VALUES ($1, 'Weekly Overdue') RETURNING id`,
+      [user.id],
+    );
+    await query(
+      `INSERT INTO recurring_expenses
+         (user_id, category_id, amount, cycle, start_date, next_due_date)
+       VALUES ($1, $2, 90, 'weekly', $3::date, $3::date)`,
+      [user.id, categories[0].id, day(-15)],
+    );
+    await generateDueRecurringExpenses(user.id, day(0));
+
+    const response = await remind(cookie);
+
+    assert.equal(response.body.created_count, 1);
+    assert.match(response.body.notifications[0].message, new RegExp(day(-1)));
+  });
+
+  test('an inactive payment is never overdue', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+    const recurringId = await missedPayment(user);
+    await query('UPDATE recurring_expenses SET is_active = false WHERE id = $1', [recurringId]);
+
+    const response = await remind(cookie);
+    const { recurringExpenses } = (await listRecurring(cookie)).body;
+
+    assert.equal(response.body.created_count, 0);
+    assert.equal(recurringExpenses[0].is_overdue, false);
+  });
+
+  test("one user's missed payment does not appear for another", async () => {
+    const owner = await createUser();
+    const other = await createUser('other@test.com');
+    const otherCookie = await loginAs(other);
+    await missedPayment(owner);
+
+    const response = await remind(otherCookie);
+    const { recurringExpenses } = (await listRecurring(otherCookie)).body;
+
+    assert.equal(response.body.created_count, 0);
+    assert.equal(recurringExpenses.length, 0);
+  });
+
+  test('rejects a today that is not close to the real date', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+
+    await request(app)
+      .get(`/api/recurring-expenses?today=${day(30)}`)
+      .set('Cookie', cookie)
+      .expect(400);
+    await request(app)
+      .get('/api/recurring-expenses?today=not-a-date')
+      .set('Cookie', cookie)
+      .expect(400);
+  });
+});
