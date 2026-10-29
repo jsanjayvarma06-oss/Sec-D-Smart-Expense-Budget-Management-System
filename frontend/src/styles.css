@@ -512,6 +512,50 @@ h3 {
   font-weight: 600;
 }
 
+.admin-layout {
+  display: grid;
+  grid-template-columns: minmax(160px, 200px) 1fr;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.admin-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-nav button {
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #344054;
+}
+
+.admin-nav button.active {
+  border-color: #cbd2dc;
+  background: #fff;
+  font-weight: 600;
+}
+
+.admin-section {
+  padding: 18px 20px;
+  border: 1px solid #e4e7ec;
+  border-radius: 12px;
+  background: #fff;
+}
+
+@media (max-width: 640px) {
+  .admin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
 
 
 /* Modern spending analytics layout */

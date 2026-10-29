@@ -132,6 +132,7 @@ Run from the repository root.
 | `npm run db:crash-drill -w backend -- --yes` | Forced-shutdown test for NFR10 (stops PostgreSQL; never on production) |
 | `npm run load:seed -w backend` / `npm run load:run -w backend` | Load-test data and runner for NFR01 and NFR05 |
 | `npm run mail:latest -w backend` | Show the newest email in the local outbox |
+| `npm run admin:create -w backend -- <email>` | Make a registered account an admin (opens the Admin panel at `/admin`) |
 
 ## Quality
 

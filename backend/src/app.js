@@ -24,6 +24,8 @@ import { notificationRoutes } from './routes/notificationRoutes.js';
 import { budgetRoutes } from './routes/budgetRoutes.js';
 import { analyticsRoutes } from './routes/analyticsRoutes.js';
 import { insightRoutes } from './routes/insightRoutes.js';
+import { adminRoutes } from './routes/adminRoutes.js';
+import { requireAdmin } from './middleware/requireAdmin.js';
 export function createApp({
   loginRateLimit = 20,
   apiRateLimit = 300,
@@ -99,6 +101,9 @@ app.use('/api/what-if', whatIfRoutes());
   app.use('/api/analytics', analyticsRoutes());
   app.use('/api/notifications', notificationRoutes());
   app.use('/api/insights', insightRoutes());
+  // Admin panel: everything under /api/admin, including paths that don't exist,
+  // is refused for anyone who isn't an admin.
+  app.use('/api/admin', requireAdmin, adminRoutes());
 
 
   // Error handling

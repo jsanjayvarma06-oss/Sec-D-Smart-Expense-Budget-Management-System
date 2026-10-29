@@ -2,6 +2,7 @@ import SpendingCharts from './SpendingCharts.jsx';
 import { useCallback, useEffect, useState } from 'react';
 import VoiceExpenseButton from './VoiceExpenseButton.jsx';
 import SubscriptionsCard from './SubscriptionsCard.jsx';
+import AdminPanel from './AdminPanel.jsx';
 import { parseSpokenExpense } from './voiceParser.js';
 
 const currentMonth = new Date().toISOString().slice(0, 7);
@@ -336,7 +337,7 @@ function ResetPasswordScreen({ token, onDone }) {
   );
 }
 
-function Dashboard({ user, onLogout }) {
+function Dashboard({ user, onLogout, onOpenAdmin }) {
   const [month, setMonth] = useState(currentMonth);
   const [budgets, setBudgets] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -877,6 +878,15 @@ function Dashboard({ user, onLogout }) {
               onChange={(event) => setMonth(event.target.value)}
             />
           </label>
+          {user.role === 'admin' && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onOpenAdmin}
+            >
+              Admin panel
+            </button>
+          )}
           <button
             type="button"
             className="secondary-button"
@@ -1633,6 +1643,24 @@ export default function App() {
       : ''
   ));
 
+  const [adminOpen, setAdminOpen] = useState(() => window.location.pathname === '/admin');
+
+  // /admin is the admin panel. Back and forward in the browser switch between it
+  // and the dashboard.
+  useEffect(() => {
+    function handlePopState() {
+      setAdminOpen(window.location.pathname === '/admin');
+    }
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  function openAdmin(open) {
+    window.history.pushState(null, '', open ? '/admin' : '/');
+    setAdminOpen(open);
+  }
+
   function finishReset(message) {
     window.history.replaceState(null, '', '/');
     setResetToken('');
@@ -1712,5 +1740,17 @@ export default function App() {
     );
   }
 
-  return <Dashboard user={user} onLogout={handleLogoutComplete} />;
+  // Only admins get the panel; anyone else at /admin sees their dashboard. The
+  // API refuses non-admins either way.
+  if (adminOpen && user.role === 'admin') {
+    return <AdminPanel user={user} apiRequest={apiRequest} onBack={() => openAdmin(false)} />;
+  }
+
+  return (
+    <Dashboard
+      user={user}
+      onLogout={handleLogoutComplete}
+      onOpenAdmin={() => openAdmin(true)}
+    />
+  );
 }

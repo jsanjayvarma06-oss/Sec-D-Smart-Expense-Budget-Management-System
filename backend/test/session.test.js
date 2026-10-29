@@ -23,7 +23,7 @@ describe('sessions', () => {
       .set('Cookie', cookie)
       .expect(200);
 
-    assert.deepEqual(res.body.user, user);
+    assert.deepEqual(res.body.user, { ...user, role: 'user' });
   });
 
   test('the session cookie is HttpOnly and SameSite=Strict', () => {
