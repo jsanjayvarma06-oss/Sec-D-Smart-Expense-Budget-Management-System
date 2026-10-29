@@ -981,3 +981,98 @@ h3 {
     font-size: 13px;
   }
 }
+/* Issue #42: Spending period selector */
+.period-selector-card {
+  margin-bottom: 20px;
+}
+
+.period-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 320px;
+  margin-top: 16px;
+}
+
+.period-controls label,
+.custom-date-controls label {
+  color: #344054;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.period-controls select,
+.custom-date-controls input {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  color: #1f2937;
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
+  font: inherit;
+}
+
+.period-controls select:focus,
+.custom-date-controls input:focus {
+  outline: 2px solid #4776e6;
+  outline-offset: 2px;
+}
+
+.custom-date-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 600px;
+  margin-top: 16px;
+}
+
+.custom-date-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.period-summary {
+  margin-top: 14px;
+  color: #667085;
+  font-size: 0.9rem;
+}
+
+.chart-total-validation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #eaecf0;
+  color: #475467;
+}
+
+.chart-total-validation strong {
+  color: #172554;
+  font-size: 1.2rem;
+}
+
+.chart-total-validation small {
+  flex-basis: 100%;
+  color: #667085;
+}
+
+.chart-validation-error {
+  margin-top: 12px;
+  color: #b42318;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 520px) {
+  .custom-date-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-total-validation {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
