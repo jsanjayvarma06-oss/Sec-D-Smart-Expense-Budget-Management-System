@@ -87,15 +87,23 @@ function getPeriodRange(period, selectedMonth, customStart, customEnd) {
       return { start: '', end: '' };
     }
 
-    return {
-      start: `${year}-${String(month).padStart(2, '0')}-01`,
-      end: localDateKey(new Date(year, month, 0)),
-    };
+    const start =
+      `${year}-${String(month).padStart(2, '0')}-01`;
+
+    const monthEnd = localDateKey(new Date(year, month, 0));
+    const end = monthEnd > todayKey ? todayKey : monthEnd;
+
+    return { start, end };
   }
 
   if (period === '3months' || period === '6months') {
     const count = period === '3months' ? 3 : 6;
-    const start = new Date(today.getFullYear(), today.getMonth() - count + 1, 1);
+
+    const start = new Date(
+      today.getFullYear(),
+      today.getMonth() - count + 1,
+      1,
+    );
 
     return {
       start: localDateKey(start),
@@ -151,6 +159,45 @@ function buildMonthlyData(expenses, start, end) {
   return months.map((item) => ({
     ...item,
     total: totals.get(item.key) || 0,
+  }));
+}
+function buildDailyData(expenses, start, end) {
+  if (!start || !end || start > end) return [];
+
+  const totals = new Map();
+  const cursor = new Date(
+    Number(start.slice(0, 4)),
+    Number(start.slice(5, 7)) - 1,
+    Number(start.slice(8, 10)),
+  );
+
+  const endDate = new Date(
+    Number(end.slice(0, 4)),
+    Number(end.slice(5, 7)) - 1,
+    Number(end.slice(8, 10)),
+  );
+
+  while (cursor <= endDate) {
+    const key = localDateKey(cursor);
+    totals.set(key, 0);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  expenses.forEach((expense) => {
+    const date = expenseDate(expense);
+
+    if (totals.has(date)) {
+      totals.set(
+        date,
+        totals.get(date) + expenseAmount(expense),
+      );
+    }
+  });
+
+  return [...totals.entries()].map(([key, total]) => ({
+    key,
+    label: String(Number(key.slice(8, 10))),
+    total,
   }));
 }
 
@@ -264,6 +311,7 @@ function MonthlyBarChart({ data }) {
     </div>
   );
 }
+
 
 function MonthlyLineChart({ data }) {
   const width = 640;
@@ -380,7 +428,156 @@ function MonthlyLineChart({ data }) {
     </div>
   );
 }
+function DailyLineChart({ data }) {
+  const width = 640;
+  const height = 290;
+  const left = 76;
+  const right = 20;
+  const top = 25;
+  const bottom = 52;
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
+  const max = Math.max(1, ...data.map((item) => item.total));
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
 
+  const points = data.map((item, index) => ({
+    ...item,
+    x:
+      left +
+      ((index + 0.5) / Math.max(data.length, 1)) * plotWidth,
+    y: top + plotHeight - (item.total / max) * plotHeight,
+  }));
+
+  const linePath = points
+    .map(
+      (point, index) =>
+        `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`,
+    )
+    .join(' ');
+
+  const areaPath = points.length
+    ? `${linePath} L ${points[points.length - 1].x} ${
+        top + plotHeight
+      } L ${points[0].x} ${top + plotHeight} Z`
+    : '';
+
+  if (!data.length) {
+    return (
+      <p className="analytics-empty">
+        No daily trend data for this period.
+      </p>
+    );
+  }
+
+  return (
+    <div className="analytics-svg-scroll">
+      <svg
+        className="analytics-svg"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="Daily spending totals shown as a line chart"
+      >
+        <defs>
+          <linearGradient
+            id="dailyLineFill"
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="1"
+          >
+            <stop
+              offset="0%"
+              stopColor="#3984f7"
+              stopOpacity="0.25"
+            />
+            <stop
+              offset="100%"
+              stopColor="#3984f7"
+              stopOpacity="0.02"
+            />
+          </linearGradient>
+        </defs>
+
+        {ticks.map((fraction) => {
+          const y = top + plotHeight * (1 - fraction);
+
+          return (
+            <g key={fraction}>
+              <line
+                x1={left}
+                x2={width - right}
+                y1={y}
+                y2={y}
+                className="analytics-grid-line"
+              />
+              <text
+                x={left - 10}
+                y={y + 4}
+                textAnchor="end"
+                className="analytics-axis-label"
+              >
+                {compactMoney(max * fraction)}
+              </text>
+            </g>
+          );
+        })}
+
+        {points.length > 1 && (
+          <path
+            d={areaPath}
+            fill="url(#dailyLineFill)"
+          />
+        )}
+
+        {points.length > 1 && (
+          <path
+            d={linePath}
+            className="analytics-line-path"
+          />
+        )}
+
+        {points.map((point, index) => (
+          <g key={point.key}>
+            <circle
+              cx={point.x}
+              cy={point.y}
+              r="4"
+              className="analytics-line-point"
+            >
+              <title>
+                {`${point.key}: ${money(point.total)}`}
+              </title>
+            </circle>
+
+            {point.total > 0 && (
+              <text
+                x={point.x}
+                y={Math.max(top + 12, point.y - 10)}
+                textAnchor="middle"
+                className="analytics-value-label"
+              >
+                {compactMoney(point.total)}
+              </text>
+            )}
+
+            {(index === 0 ||
+              index === points.length - 1 ||
+              Number(point.label) % 5 === 0) && (
+              <text
+                x={point.x}
+                y={height - 17}
+                textAnchor="middle"
+                className="analytics-axis-label"
+              >
+                {point.label}
+              </text>
+            )}
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
 function CategoryPieChart({ expenses, categories }) {
   const categoryData = useMemo(() => {
     const totals = new Map();
@@ -503,6 +700,11 @@ export default function SpendingCharts({
     () => buildMonthlyData(filteredExpenses, range.start, range.end),
     [filteredExpenses, range.start, range.end],
   );
+  
+  const dailyData = useMemo(
+    () => buildDailyData(filteredExpenses, range.start, range.end),
+    [filteredExpenses, range.start, range.end],
+  );
 
   const recordCount = filteredExpenses.length;
   const average = monthlyData.length ? total / monthlyData.length : 0;
@@ -623,12 +825,24 @@ export default function SpendingCharts({
             </ChartCard>
 
             <ChartCard
-              eyebrow="SPENDING OVER TIME"
-              title="Monthly spending trend"
-              subtitle="See how your monthly expenses change"
-            >
-              <MonthlyLineChart data={monthlyData} />
-            </ChartCard>
+  eyebrow="SPENDING OVER TIME"
+  title={
+    period === 'month'
+      ? 'Daily spending trend'
+      : 'Monthly spending trend'
+  }
+  subtitle={
+    period === 'month'
+      ? 'See how your daily expenses change'
+      : 'See how your monthly expenses change'
+  }
+>
+  {period === 'month' ? (
+    <DailyLineChart data={dailyData} />
+  ) : (
+    <MonthlyLineChart data={monthlyData} />
+  )}
+</ChartCard>
 
             <ChartCard
               eyebrow="TOP CATEGORIES"
