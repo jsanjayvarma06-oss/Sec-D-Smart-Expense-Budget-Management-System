@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import VoiceExpenseButton from './VoiceExpenseButton.jsx';
 import SubscriptionsCard from './SubscriptionsCard.jsx';
 import AdminPanel from './AdminPanel.jsx';
+import TwoFactorSetup from './TwoFactorSetup.jsx';
 import { parseSpokenExpense } from './voiceParser.js';
 
 const currentMonth = new Date().toISOString().slice(0, 7);
@@ -337,7 +338,7 @@ function ResetPasswordScreen({ token, onDone }) {
   );
 }
 
-function Dashboard({ user, onLogout, onOpenAdmin }) {
+function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
   const [month, setMonth] = useState(currentMonth);
   const [budgets, setBudgets] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -1617,6 +1618,8 @@ function Dashboard({ user, onLogout, onOpenAdmin }) {
         )}
       </section>
 
+      <TwoFactorSetup user={user} apiRequest={apiRequest} onEnabled={onUserChanged} />
+
       <footer className="dashboard-footer">
         <p className="muted">Signed in as {user.email}.</p>
         <button
@@ -1751,6 +1754,7 @@ export default function App() {
       user={user}
       onLogout={handleLogoutComplete}
       onOpenAdmin={() => openAdmin(true)}
+      onUserChanged={loadCurrentUser}
     />
   );
 }

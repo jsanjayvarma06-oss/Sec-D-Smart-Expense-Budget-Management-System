@@ -15,6 +15,20 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is not set. Add it to backend/.env (see README)');
 }
 
+// Key that encrypts two-factor secrets in the database (AES-256-GCM): 32 bytes
+// written as 64 hex characters. Production must set its own. Development and
+// tests fall back to a fixed key so the app runs without setup; secrets
+// encrypted with it are only as safe as this repository.
+function twoFactorKey() {
+  const value = process.env.TWO_FACTOR_KEY;
+  if (value) {
+    if (!/^[0-9a-f]{64}$/i.test(value)) throw new Error('TWO_FACTOR_KEY must be 64 hex characters');
+    return Buffer.from(value, 'hex');
+  }
+  if (isProduction) throw new Error('TWO_FACTOR_KEY is not set (see README)');
+  return Buffer.from('a3f1c2d4e5b6978877665544332211000f1e2d3c4b5a69788796a5b4c3d2e1f0', 'hex');
+}
+
 export const config = {
   env,
   isProduction,
@@ -47,6 +61,11 @@ export const config = {
     // Where the reset link in the email points (the web app).
     appUrl: (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, ''),
     expiryMinutes: int('PASSWORD_RESET_MINUTES', 30),
+  },
+  twoFactor: {
+    // Shown as the account name in the authenticator app.
+    issuer: 'Smart Expense',
+    encryptionKey: twoFactorKey(),
   },
   mail: {
     // e.g. smtps://user:pass@smtp.example.com. Unset: emails go to mail_outbox.

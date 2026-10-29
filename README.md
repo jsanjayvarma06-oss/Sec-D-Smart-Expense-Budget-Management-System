@@ -113,6 +113,7 @@ All settings are environment variables. Only `DATABASE_URL` is required.
 | `PASSWORD_RESET_MINUTES` | 30 | Reset link lifetime |
 | `SMTP_URL` | none | SMTP server for email; unset means the local outbox |
 | `MAIL_FROM` | Smart Expense &lt;no-reply@localhost&gt; | Sender address |
+| `TWO_FACTOR_KEY` | development key | 64 hex characters that encrypt two-factor secrets; required in production (`openssl rand -hex 32`) |
 | `API_PROXY_TARGET` | http://localhost:4000 | Frontend dev server's API address (`frontend/.env`) |
 
 ## Scripts

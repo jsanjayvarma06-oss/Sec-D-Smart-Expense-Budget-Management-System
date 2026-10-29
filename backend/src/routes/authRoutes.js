@@ -14,7 +14,9 @@ import {
   loginSchema,
   registerSchema,
   resetPasswordSchema,
+  twoFactorCodeSchema,
 } from '../services/authSchemas.js';
+import { confirmTwoFactorSetup, startTwoFactorSetup } from '../services/twoFactorService.js';
 import { requestPasswordReset, resetPassword } from '../services/passwordResetService.js';
 import { query } from '../db/pool.js';
 import { HttpError } from '../utils/httpError.js';
@@ -146,6 +148,42 @@ export function authRoutes() {
   // Return the current authenticated user.
   router.get('/me', (req, res) => {
     res.json({ user: req.user });
+  });
+
+  // Two-factor setup, step 1: a new secret as a QR code, shown this once.
+  router.post('/two-factor/setup', async (req, res, next) => {
+    try {
+      const setup = await startTwoFactorSetup(req.user.id);
+      if (!setup) {
+        throw new HttpError(409, 'Two-factor login is already on', { code: 'TWO_FACTOR_ALREADY_ON' });
+      }
+      // The secret is in this response, so make sure nothing stores it.
+      res.set('Cache-Control', 'no-store');
+      res.json(setup);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Two-factor setup, step 2: a valid code from the app turns it on.
+  router.post('/two-factor/confirm', validate(twoFactorCodeSchema), async (req, res, next) => {
+    try {
+      const result = await confirmTwoFactorSetup(req.user.id, req.body.code);
+      if (result === 'invalid_code') {
+        throw new HttpError(400, 'That code is not right. Check the time on your phone and try the newest code.', {
+          code: 'INVALID_TWO_FACTOR_CODE',
+        });
+      }
+      if (result === 'no_setup') {
+        throw new HttpError(400, 'Start two-factor setup first', { code: 'TWO_FACTOR_NOT_STARTED' });
+      }
+      if (result === 'already_enabled') {
+        throw new HttpError(409, 'Two-factor login is already on', { code: 'TWO_FACTOR_ALREADY_ON' });
+      }
+      res.json({ user: { ...req.user, two_factor_enabled: true } });
+    } catch (err) {
+      next(err);
+    }
   });
 
   return router;

@@ -545,6 +545,42 @@ h3 {
   background: #fff;
 }
 
+.two-factor-setup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.two-factor-setup img {
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.two-factor-setup ol {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+
+.two-factor-key {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+}
+
+.two-factor-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.two-factor-on {
+  color: #16805d;
+  font-weight: 600;
+}
+
 @media (max-width: 640px) {
   .admin-layout {
     grid-template-columns: 1fr;
