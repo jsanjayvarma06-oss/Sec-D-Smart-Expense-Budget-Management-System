@@ -308,6 +308,9 @@ describe('Admin: built-in categories (#129)', () => {
       await retire(food).expect(200);
       const categories = (await request(app).get('/api/categories').set('Cookie', cookie).expect(200)).body.categories;
       assert.ok(!categories.some((category) => category.id === food));
+      const suggestion = await request(app).get('/api/categories/suggest?merchant=Swiggy')
+        .set('Cookie', cookie).expect(200);
+      assert.equal(suggestion.body.category, null);
 
       await request(app).post('/api/expenses').set('Cookie', cookie)
         .send({ amount: 25, category_id: food, spent_on: '2026-10-06' }).expect(400);
