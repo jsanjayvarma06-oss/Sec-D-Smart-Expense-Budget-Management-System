@@ -24,7 +24,8 @@ async function resolveCategory(db, userId, expense) {
       `SELECT id
        FROM categories
        WHERE id = $1
-         AND (user_id IS NULL OR user_id = $2)`,
+         AND (user_id IS NULL OR user_id = $2)
+         AND retired_at IS NULL`,
       [expense.category_id, userId],
     );
 
