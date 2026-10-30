@@ -37,7 +37,7 @@ async function asAdmin(adminId, fn) {
 export async function listDefaultCategories(adminId) {
   return asAdmin(adminId, async (db, audit) => {
     const { rows } = await db.query(
-      `SELECT id, name, created_at
+      `SELECT id, name, created_at, retired_at
        FROM categories
        WHERE user_id IS NULL
        ORDER BY lower(name)`,
@@ -53,7 +53,7 @@ export async function createDefaultCategory(adminId, name) {
     const { rows } = await db.query(
       `INSERT INTO categories (user_id, name)
        VALUES (NULL, $1)
-       RETURNING id, name, created_at`,
+       RETURNING id, name, created_at, retired_at`,
       [name],
     );
     await audit('create_default_category', { category: rows[0].name });
@@ -73,13 +73,60 @@ export async function renameDefaultCategory(adminId, categoryId, name) {
     const { rows } = await db.query(
       `UPDATE categories SET name = $1
        WHERE id = $2 AND user_id IS NULL
-       RETURNING id, name, created_at`,
+       RETURNING id, name, created_at, retired_at`,
       [name, categoryId],
     );
     await audit('rename_default_category', {
       renamed_from: current[0].name,
       renamed_to: rows[0].name,
     });
+    return rows[0];
+  });
+}
+
+ 
+// Retire a built-in category without changing historical records. Returns
+// null for an unknown/non-built-in ID and false if it is already retired.
+export async function retireDefaultCategory(adminId, categoryId) {
+  return asAdmin(adminId, async (db, audit) => {
+    const { rows } = await db.query(
+      `UPDATE categories
+       SET retired_at = now()
+       WHERE id = $1 AND user_id IS NULL AND retired_at IS NULL
+       RETURNING id, name, created_at, retired_at`,
+      [categoryId],
+    );
+    if (!rows[0]) {
+      const { rows: existing } = await db.query(
+        'SELECT id, name, retired_at FROM categories WHERE id = $1 AND user_id IS NULL',
+        [categoryId],
+      );
+      if (!existing[0]) return null;
+      return { already_retired: true, ...existing[0] };
+    }
+    await audit('retire_default_category', { category: rows[0].name, category_id: categoryId });
+    return rows[0];
+  });
+}
+
+// Restore a retired built-in category to new-entry selection.
+export async function restoreDefaultCategory(adminId, categoryId) {
+  return asAdmin(adminId, async (db, audit) => {
+    const { rows } = await db.query(
+      `UPDATE categories
+       SET retired_at = NULL
+       WHERE id = $1 AND user_id IS NULL AND retired_at IS NOT NULL
+       RETURNING id, name, created_at, retired_at`,
+      [categoryId],
+    );
+    if (!rows[0]) {
+      const { rows: existing } = await db.query(
+        'SELECT id, name, retired_at FROM categories WHERE id = $1 AND user_id IS NULL',
+        [categoryId],
+      );
+      return existing[0] ? { already_active: true, ...existing[0] } : null;
+    }
+    await audit('restore_default_category', { category: rows[0].name, category_id: categoryId });
     return rows[0];
   });
 }
