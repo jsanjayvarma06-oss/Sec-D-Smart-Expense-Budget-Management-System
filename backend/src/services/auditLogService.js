@@ -27,3 +27,44 @@ export async function recordAdminAction(
   );
   return rows[0];
 }
+
+// The newest entries matching the filters, for the audit log screen (#124).
+// `from` and `to` are timestamps; `to` is exclusive, so the screen can ask for
+// whole days in the admin's own time zone. Names come from the users table at
+// read time, so an account that has since been deleted shows no name. Also
+// returns the admins and actions that appear in the log, for the filter lists.
+export async function listAdminActions({
+  adminId = null, action = null, from = null, to = null, limit = 100,
+} = {}) {
+  const { rows } = await query(
+    `SELECT l.id, l.action, l.details, l.created_at,
+            l.admin_id, a.name AS admin_name,
+            l.target_user_id, t.name AS target_name, t.email AS target_email
+     FROM admin_audit_log l
+     LEFT JOIN users a ON a.id = l.admin_id
+     LEFT JOIN users t ON t.id = l.target_user_id
+     WHERE ($1::uuid IS NULL OR l.admin_id = $1)
+       AND ($2::text IS NULL OR l.action = $2)
+       AND ($3::timestamptz IS NULL OR l.created_at >= $3)
+       AND ($4::timestamptz IS NULL OR l.created_at < $4)
+     ORDER BY l.created_at DESC, l.id DESC
+     LIMIT $5`,
+    [adminId, action, from, to, limit + 1],
+  );
+
+  const [admins, actions] = await Promise.all([
+    query(
+      `SELECT DISTINCT u.id, u.name
+       FROM admin_audit_log l JOIN users u ON u.id = l.admin_id
+       ORDER BY u.name, u.id`,
+    ),
+    query('SELECT DISTINCT action FROM admin_audit_log ORDER BY action'),
+  ]);
+
+  return {
+    entries: rows.slice(0, limit),
+    has_more: rows.length > limit,
+    admins: admins.rows,
+    actions: actions.rows.map((row) => row.action),
+  };
+}
