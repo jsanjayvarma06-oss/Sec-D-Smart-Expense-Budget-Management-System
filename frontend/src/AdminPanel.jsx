@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import AuditLog from './AuditLog.jsx';
 import SystemHealth from './SystemHealth.jsx';
 
 // Admin panel shell (story #109). Admins manage accounts and the system, never
@@ -17,6 +18,7 @@ const SECTIONS = [
 
 const BUILT = {
   system: SystemHealth,
+  audit: AuditLog,
 };
 
 export default function AdminPanel({ user, apiRequest, onBack }) {

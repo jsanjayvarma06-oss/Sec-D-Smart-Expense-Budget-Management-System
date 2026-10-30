@@ -5,7 +5,7 @@ import { createApp } from '../src/app.js';
 import { query } from '../src/db/pool.js';
 import { adminRoutes } from '../src/routes/adminRoutes.js';
 import { promoteToAdmin } from '../src/services/adminService.js';
-import { recordAdminAction } from '../src/services/auditLogService.js';
+import { listAdminActions, recordAdminAction } from '../src/services/auditLogService.js';
 import { createUser, loginAs, useTestDatabase } from './helpers.js';
 
 useTestDatabase();
@@ -98,6 +98,7 @@ describe('Audit log table (#123)', () => {
 const ADMIN_ROUTE_CALLS = {
   'GET /overview': { action: 'view_overview', call: (cookie) => request(app).get('/api/admin/overview').set('Cookie', cookie) },
   'GET /health': { action: 'view_system_health', call: (cookie) => request(app).get('/api/admin/health').set('Cookie', cookie) },
+  'GET /audit-log': { action: 'view_audit_log', call: (cookie) => request(app).get('/api/admin/audit-log').set('Cookie', cookie) },
 };
 
 describe('recordAdminAction is used by every admin route (#123)', () => {
@@ -123,5 +124,130 @@ describe('recordAdminAction is used by every admin route (#123)', () => {
     const user = await createUser();
     await ADMIN_ROUTE_CALLS['GET /overview'].call(await loginAs(user)).expect(403);
     assert.equal((await entriesBy(user.id)).length, 0);
+  });
+});
+
+// An entry at a chosen time, the way recordAdminAction would write it.
+async function addEntry(adminId, action, createdAt, targetUserId = null) {
+  await query(
+    `INSERT INTO admin_audit_log (admin_id, action, target_user_id, created_at)
+     VALUES ($1, $2, $3, $4)`,
+    [adminId, action, targetUserId, createdAt],
+  );
+}
+
+function auditLog(cookie, filters = {}) {
+  return request(app).get('/api/admin/audit-log').query(filters).set('Cookie', cookie);
+}
+
+describe('GET /api/admin/audit-log (#124)', () => {
+  test('lists entries newest first with the admin and the account they acted on', async () => {
+    const admin = await createAdmin();
+    const target = await createUser('target@test.com', 'Target Person');
+    await addEntry(admin.id, 'unlock_account', '2026-10-01T10:00:00Z', target.id);
+    await addEntry(admin.id, 'view_overview', '2026-10-02T10:00:00Z');
+
+    const { body } = await auditLog(await loginAs(admin), { admin_id: admin.id }).expect(200);
+
+    assert.deepEqual(body.entries.map((e) => e.action), ['view_overview', 'unlock_account']);
+    const [, unlock] = body.entries;
+    assert.equal(unlock.admin_name, 'Admin User');
+    assert.equal(unlock.target_user_id, target.id);
+    assert.equal(unlock.target_name, 'Target Person');
+    assert.equal(unlock.target_email, 'target@test.com');
+    assert.equal(unlock.created_at, '2026-10-01T10:00:00.000Z');
+  });
+
+  test('filters by admin', async () => {
+    const first = await createAdmin('first@test.com');
+    const second = await createAdmin('second@test.com');
+    await addEntry(first.id, 'view_overview', '2026-10-01T10:00:00Z');
+    await addEntry(second.id, 'view_overview', '2026-10-01T11:00:00Z');
+
+    const { body } = await auditLog(await loginAs(first), { admin_id: second.id }).expect(200);
+    assert.deepEqual(body.entries.map((e) => e.admin_id), [second.id]);
+  });
+
+  test('filters by action', async () => {
+    const admin = await createAdmin();
+    await addEntry(admin.id, 'view_overview', '2026-10-01T10:00:00Z');
+    await addEntry(admin.id, 'view_system_health', '2026-10-01T11:00:00Z');
+
+    const { body } = await auditLog(await loginAs(admin), {
+      admin_id: admin.id, action: 'view_system_health',
+    }).expect(200);
+    assert.deepEqual(body.entries.map((e) => e.action), ['view_system_health']);
+  });
+
+  test('filters by date: from is included, to is not', async () => {
+    const admin = await createAdmin();
+    await addEntry(admin.id, 'day_before', '2026-10-09T23:59:59Z');
+    await addEntry(admin.id, 'first_moment', '2026-10-10T00:00:00Z');
+    await addEntry(admin.id, 'last_moment', '2026-10-10T23:59:59Z');
+    await addEntry(admin.id, 'day_after', '2026-10-11T00:00:00Z');
+
+    const { body } = await auditLog(await loginAs(admin), {
+      admin_id: admin.id, from: '2026-10-10T00:00:00.000Z', to: '2026-10-11T00:00:00.000Z',
+    }).expect(200);
+    assert.deepEqual(body.entries.map((e) => e.action), ['last_moment', 'first_moment']);
+  });
+
+  test('empty filters mean any', async () => {
+    const admin = await createAdmin();
+    await addEntry(admin.id, 'view_overview', '2026-10-01T10:00:00Z');
+
+    const { body } = await auditLog(await loginAs(admin), {
+      admin_id: '', action: '', from: '', to: '',
+    }).expect(200);
+    assert.ok(body.entries.some((e) => e.admin_id === admin.id));
+  });
+
+  test('refuses filters that are not valid', async () => {
+    const cookie = await loginAs(await createAdmin());
+    await auditLog(cookie, { admin_id: 'not-an-id' }).expect(400);
+    await auditLog(cookie, { action: 'DROP TABLE' }).expect(400);
+    await auditLog(cookie, { from: 'yesterday' }).expect(400);
+    const res = await auditLog(cookie, {
+      from: '2026-10-11T00:00:00.000Z', to: '2026-10-10T00:00:00.000Z',
+    }).expect(400);
+    assert.match(res.body.error, /start date must be before the end date/);
+  });
+
+  test('lists the admins and actions in the log for the filters', async () => {
+    const admin = await createAdmin();
+    const gone = await createAdmin('gone@test.com');
+    await addEntry(admin.id, 'view_overview', '2026-10-01T10:00:00Z');
+    await addEntry(gone.id, 'view_system_health', '2026-10-01T10:00:00Z');
+    await query('DELETE FROM users WHERE id = $1', [gone.id]);
+
+    const { body } = await auditLog(await loginAs(admin)).expect(200);
+    assert.ok(body.admins.some((a) => a.id === admin.id && a.name === 'Admin User'));
+    assert.ok(!body.admins.some((a) => a.id === gone.id));
+    assert.ok(body.actions.includes('view_overview'));
+    assert.ok(body.actions.includes('view_system_health'));
+
+    // The deleted admin's entry stays, without a name.
+    const { body: goneLog } = await auditLog(await loginAs(admin), { admin_id: gone.id }).expect(200);
+    assert.equal(goneLog.entries.length, 1);
+    assert.equal(goneLog.entries[0].admin_name, null);
+  });
+
+  test('says when there are more entries than it returns', async () => {
+    const admin = await createAdmin();
+    for (const day of ['01', '02', '03']) await addEntry(admin.id, 'view_overview', `2026-10-${day}T10:00:00Z`);
+
+    const two = await listAdminActions({ adminId: admin.id, limit: 2 });
+    assert.equal(two.entries.length, 2);
+    assert.equal(two.has_more, true);
+    assert.equal((await listAdminActions({ adminId: admin.id, limit: 3 })).has_more, false);
+  });
+
+  test('viewing the log is recorded with the filters used', async () => {
+    const admin = await createAdmin();
+    await auditLog(await loginAs(admin), { action: 'view_overview' }).expect(200);
+
+    const [entry] = await entriesBy(admin.id);
+    assert.equal(entry.action, 'view_audit_log');
+    assert.deepEqual(entry.details, { action: 'view_overview' });
   });
 });
