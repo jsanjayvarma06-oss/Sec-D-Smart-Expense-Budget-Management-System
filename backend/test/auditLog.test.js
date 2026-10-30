@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { afterEach, describe, test } from 'node:test';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { query } from '../src/db/pool.js';
@@ -99,7 +99,36 @@ const ADMIN_ROUTE_CALLS = {
   'GET /overview': { action: 'view_overview', call: (cookie) => request(app).get('/api/admin/overview').set('Cookie', cookie) },
   'GET /health': { action: 'view_system_health', call: (cookie) => request(app).get('/api/admin/health').set('Cookie', cookie) },
   'GET /audit-log': { action: 'view_audit_log', call: (cookie) => request(app).get('/api/admin/audit-log').set('Cookie', cookie) },
+  'GET /categories': { action: 'view_default_categories', call: (cookie) => request(app).get('/api/admin/categories').set('Cookie', cookie) },
+  'POST /categories': {
+    action: 'create_default_category',
+    status: 201,
+    call: (cookie) => request(app).post('/api/admin/categories').set('Cookie', cookie).send({ name: 'Audit probe added' }),
+  },
+  'PUT /categories/:id': {
+    action: 'rename_default_category',
+    call: async (cookie) => request(app)
+      .put(`/api/admin/categories/${await probeCategory()}`)
+      .set('Cookie', cookie)
+      .send({ name: 'Audit probe renamed' }),
+  },
+  'DELETE /categories/:id': {
+    action: 'delete_default_category',
+    status: 204,
+    call: async (cookie) => request(app)
+      .delete(`/api/admin/categories/${await probeCategory()}`)
+      .set('Cookie', cookie),
+  },
 };
+
+// A built-in category made just for these tests, so the real ones are never
+// renamed or removed.
+async function probeCategory() {
+  const { rows } = await query(
+    `INSERT INTO categories (user_id, name) VALUES (NULL, 'Audit probe') RETURNING id`,
+  );
+  return rows[0].id;
+}
 
 describe('recordAdminAction is used by every admin route (#123)', () => {
   test('the list above covers every admin route', () => {
@@ -111,10 +140,15 @@ describe('recordAdminAction is used by every admin route (#123)', () => {
     assert.deepEqual(routes.sort(), Object.keys(ADMIN_ROUTE_CALLS).sort());
   });
 
-  for (const [route, { action, call }] of Object.entries(ADMIN_ROUTE_CALLS)) {
+  afterEach(() => query(
+    `DELETE FROM categories WHERE user_id IS NULL AND name LIKE 'Audit probe%'`,
+  ));
+
+  for (const [route, { action, call, status = 200 }] of Object.entries(ADMIN_ROUTE_CALLS)) {
     test(`${route} records "${action}"`, async () => {
       const admin = await createAdmin();
-      await call(await loginAs(admin)).expect(200);
+      const response = await call(await loginAs(admin));
+      assert.equal(response.status, status);
 
       assert.deepEqual((await entriesBy(admin.id)).map((e) => e.action), [action]);
     });
@@ -194,7 +228,9 @@ describe('GET /api/admin/audit-log (#124)', () => {
 
   test('empty filters mean any', async () => {
     const admin = await createAdmin();
-    await addEntry(admin.id, 'view_overview', '2026-10-01T10:00:00Z');
+    // Dated now, so it is among the newest 100 however many entries earlier
+    // tests (and earlier runs) have left in the append-only log.
+    await addEntry(admin.id, 'view_overview', new Date().toISOString());
 
     const { body } = await auditLog(await loginAs(admin), {
       admin_id: '', action: '', from: '', to: '',

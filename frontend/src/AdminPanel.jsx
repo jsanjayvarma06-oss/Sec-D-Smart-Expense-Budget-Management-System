@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import AdminCategories from './AdminCategories.jsx';
 import AuditLog from './AuditLog.jsx';
 import SystemHealth from './SystemHealth.jsx';
 
@@ -17,6 +18,7 @@ const SECTIONS = [
 ];
 
 const BUILT = {
+  categories: AdminCategories,
   system: SystemHealth,
   audit: AuditLog,
 };

@@ -1169,3 +1169,10 @@ h3 {
   margin-top: 4px;
   font-size: 0.85rem;
 }
+
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
