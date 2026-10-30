@@ -357,6 +357,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
   const [categories, setCategories] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [expenseForm, setExpenseForm] = useState(emptyExpense);
+  const [suggestedCategoryId, setSuggestedCategoryId] = useState('');
   const [voiceNote, setVoiceNote] = useState({ kind: '', text: '' });
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -505,10 +506,40 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
   function updateField(event) {
     const { name, value } = event.target;
 
+    // Choosing a category by hand ends the suggestion; it is the user's now.
+    if (name === 'category_id') setSuggestedCategoryId('');
+
     setExpenseForm((current) => ({
       ...current,
       [name]: value,
     }));
+  }
+
+  // FR05: when the user leaves the merchant field and has not chosen a
+  // category, ask the server which one the merchant name suggests and fill it
+  // in. They can change it; a category they chose themselves is never replaced.
+  async function suggestCategoryFromMerchant() {
+    const merchant = expenseForm.merchant.trim();
+    const canFill = !expenseForm.category_id
+      || expenseForm.category_id === suggestedCategoryId;
+
+    if (!merchant || !canFill) return;
+
+    try {
+      const result = await apiRequest(
+        `/api/categories/suggest?merchant=${encodeURIComponent(merchant)}`,
+      );
+
+      if (result.category) {
+        setExpenseForm((current) => ({ ...current, category_id: result.category.id }));
+        setSuggestedCategoryId(result.category.id);
+      } else if (suggestedCategoryId) {
+        setExpenseForm((current) => ({ ...current, category_id: '' }));
+        setSuggestedCategoryId('');
+      }
+    } catch {
+      // A suggestion is a convenience; the user can still pick a category.
+    }
   }
 
   // Voice entry (story #87): fill the form from a spoken sentence, for the
@@ -535,6 +566,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
 
   function startEditing(expense) {
     setEditingId(expense.id);
+    setSuggestedCategoryId('');
 
     setExpenseForm({
       amount: String(expense.amount),
@@ -551,9 +583,17 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
 
   function cancelEditing() {
     setEditingId(null);
+    setSuggestedCategoryId('');
     setExpenseForm({ ...emptyExpense, spent_on: localToday() });
     setError('');
     setMessage('');
+  }
+
+  // When the server chose the category from the merchant name, say which one.
+  function suggestedNotice(expense) {
+    if (!expense?.category_suggested) return '';
+    const name = categories.find((category) => category.id === expense.category_id)?.name;
+    return name ? ` Category set to ${name} from the merchant name.` : '';
   }
 
   async function handleExpenseSubmit(event) {
@@ -562,8 +602,8 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
     setMessage('');
     setVoiceNote({ kind: '', text: '' });
 
-    if (!expenseForm.category_id) {
-      setError('Please select a category.');
+    if (!expenseForm.category_id && !expenseForm.merchant.trim()) {
+      setError('Choose a category, or enter a merchant name so one can be suggested.');
       return;
     }
 
@@ -583,7 +623,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
 
     const payload = {
       amount,
-      category_id: expenseForm.category_id,
+      category_id: expenseForm.category_id || null,
       spent_on: expenseForm.spent_on,
       merchant: expenseForm.merchant.trim() || null,
       note: expenseForm.note.trim() || null,
@@ -599,21 +639,24 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
           },
         );
 
-        setMessage(
-          unusualSpendingNotice(result.expense, 'Expense updated successfully.'),
-        );
+        setMessage(unusualSpendingNotice(
+          result.expense,
+          `Expense updated successfully.${suggestedNotice(result.expense)}`,
+        ));
       } else {
         const result = await apiRequest('/api/expenses', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
 
-        setMessage(
-          unusualSpendingNotice(result.expense, 'Expense added successfully.'),
-        );
+        setMessage(unusualSpendingNotice(
+          result.expense,
+          `Expense added successfully.${suggestedNotice(result.expense)}`,
+        ));
       }
 
       setEditingId(null);
+      setSuggestedCategoryId('');
       setExpenseForm({ ...emptyExpense, spent_on: localToday() });
       refreshData();
     } catch (err) {
@@ -1536,7 +1579,6 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
               name="category_id"
               value={expenseForm.category_id}
               onChange={updateField}
-              required
             >
               <option value="">Select a category</option>
               {categories.map((category) => (
@@ -1545,6 +1587,12 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
                 </option>
               ))}
             </select>
+            {expenseForm.category_id
+              && expenseForm.category_id === suggestedCategoryId && (
+              <span className="muted category-hint">
+                Suggested from the merchant name. Change it if it is wrong.
+              </span>
+            )}
           </label>
 
           <label>
@@ -1565,6 +1613,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
               name="merchant"
               value={expenseForm.merchant}
               onChange={updateField}
+              onBlur={suggestCategoryFromMerchant}
               maxLength={100}
               placeholder="e.g. Swiggy"
             />

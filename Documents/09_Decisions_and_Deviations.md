@@ -83,7 +83,6 @@ These acceptance criteria in `01_SRS_Document.pdf` should read as follows once t
 | FR01 / UC-01 step 4 | Password must meet "the strength rule" | Requires 8–72 characters only; no mix of letters, numbers and symbols is enforced | Open | Registration (#14) |
 | UC-01 8b | "User may … start password recovery" | Built in Sprint 2: emailed single-use link, 30-minute expiry | Added | Sanjay (#29) |
 | FR02 / UC-02 | User adds, edits and deletes income | The income API is complete and tested, but the dashboard has no income screen, so income can't be entered in the app yet | Open | Dashboard / income UI |
-| FR05 | A category is suggested from the merchant name | The suggestion code exists but can't be reached: the API requires a category, and the form offers no suggestion (UT_13) | Open | Dinesh (#32) |
 | FR07 / UC-04 8c–8d | Over-allocated category budgets: warn, user may continue | Refused outright | Changed: stricter, keeps totals consistent; update UC-04 | Team decision |
 | FR10 / UC-05 | Pie, bar and line charts | The data behind the charts is complete and correct (UT_18, UT_19, IT_04), but no charts are drawn yet | Open | Jahnavi (#39, #40, #41) |
 | FR13 | Recommendations stay within income | They report 3 months of income as one month (₹45,000 for a ₹15,000 salary), and the last category is padded to use up the whole limit (IT_08). Not shown in the UI | Open | Dinesh (#45) |
