@@ -1,7 +1,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { suggestCategoryName } from '../src/services/merchantCategoryService.js';
+import { SUGGESTED_CATEGORY_NAMES, suggestCategoryName } from '../src/services/merchantCategoryService.js';
 
 describe('Merchant category suggestions', () => {
   test('suggests Food for Swiggy and Zomato', () => {
@@ -36,5 +36,33 @@ describe('Merchant category suggestions', () => {
     assert.equal(suggestCategoryName('Unknown Store'), null);
     assert.equal(suggestCategoryName(''), null);
     assert.equal(suggestCategoryName(null), null);
+  });
+
+  test('matches whole words only, so look-alikes are not suggested', () => {
+    assert.equal(suggestCategoryName('Ola cabs'), 'Transport');
+    assert.equal(suggestCategoryName('Coca-Cola stall'), null);
+    assert.equal(suggestCategoryName('City bus pass'), 'Transport');
+    assert.equal(suggestCategoryName('Business centre'), null);
+    assert.equal(suggestCategoryName('Cafeteria'), null);
+    assert.equal(suggestCategoryName('Pizza'), 'Food');
+  });
+
+  test('matches a keyword next to punctuation, digits and extra spaces', () => {
+    assert.equal(suggestCategoryName('  SWIGGY*ORDER 1234 '), 'Food');
+    assert.equal(suggestCategoryName('netflix.com'), 'Entertainment');
+    assert.equal(suggestCategoryName('Apollo   Pharmacy'), 'Healthcare');
+    assert.equal(suggestCategoryName('Apollo Pharmacy, Belagavi'), 'Healthcare');
+  });
+
+  test('Uber Eats is food, a plain Uber is transport', () => {
+    assert.equal(suggestCategoryName('Uber Eats'), 'Food');
+    assert.equal(suggestCategoryName('Uber trip'), 'Transport');
+  });
+
+  test('lists the category names the rules point at', () => {
+    assert.deepEqual(
+      [...SUGGESTED_CATEGORY_NAMES].sort(),
+      ['Entertainment', 'Food', 'Healthcare', 'Shopping', 'Transport', 'Utilities'],
+    );
   });
 });

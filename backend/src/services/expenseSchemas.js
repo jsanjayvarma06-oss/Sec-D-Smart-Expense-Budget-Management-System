@@ -42,7 +42,11 @@ const merchantSchema = z.string()
 
 export const createExpenseSchema = z.object({
   amount: amountSchema,
-  category_id: z.string().uuid('Enter a valid category ID'),
+  // Optional (FR05): leave it out and the category is suggested from the
+  // merchant name. A category the user picks always wins.
+  category_id: z.string().uuid('Enter a valid category ID')
+    .nullish()
+    .transform((value) => value ?? undefined),
   spent_on: dateSchema,
   note: noteSchema,
   merchant: merchantSchema,

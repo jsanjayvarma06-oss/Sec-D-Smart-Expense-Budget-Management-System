@@ -8,6 +8,7 @@ import {
 } from '../services/categorySchemas.js';
 import {
   listCategories,
+  suggestCategory,
   createCategory,
   updateCategory,
   deleteCategory,
@@ -36,6 +37,21 @@ export function categoryRoutes() {
     try {
       const categories = await listCategories(req.user.id);
       res.json({ categories });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // The category suggested for a merchant name (FR05), or null. The form uses
+  // this to fill in the category before the user saves; they can change it.
+  // GET /api/categories/suggest?merchant=Swiggy
+  router.get('/suggest', async (req, res, next) => {
+    try {
+      const merchant = typeof req.query.merchant === 'string'
+        ? req.query.merchant.slice(0, 100)
+        : '';
+      const category = await suggestCategory(req.user.id, merchant);
+      res.json({ category });
     } catch (err) {
       next(err);
     }

@@ -1,7 +1,18 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { validate } from '../middleware/validate.js';
+import { validateIdParam } from '../middleware/validateIdParam.js';
+import {
+  createDefaultCategory,
+  deleteDefaultCategory,
+  listDefaultCategories,
+  renameDefaultCategory,
+  retireDefaultCategory,
+  restoreDefaultCategory,
+} from '../services/adminCategoryService.js';
 import { getAdminOverview } from '../services/adminService.js';
 import { listAdminActions, recordAdminAction } from '../services/auditLogService.js';
+import { createCategorySchema, updateCategorySchema } from '../services/categorySchemas.js';
 import { getSystemHealth } from '../services/systemHealthService.js';
 import { HttpError } from '../utils/httpError.js';
 
@@ -67,5 +78,86 @@ export function adminRoutes() {
     }
   });
 
+  // Built-in categories (#129): list, add, rename and remove. Only the names
+  // are shown; nothing here touches anyone's expenses, budgets or notes.
+  router.get('/categories', async (req, res, next) => {
+    try {
+      res.json(await listDefaultCategories(req.user.id));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/categories', validate(createCategorySchema), async (req, res, next) => {
+    try {
+      const category = await createDefaultCategory(req.user.id, req.body.name);
+      res.status(201).json({ category });
+    } catch (err) {
+      next(categoryError(err));
+    }
+  });
+
+  router.put('/categories/:id', validateIdParam(), validate(updateCategorySchema), async (req, res, next) => {
+    try {
+      const category = await renameDefaultCategory(req.user.id, req.params.id, req.body.name);
+      if (!category) throw new HttpError(404, 'Built-in category not found');
+      res.json({ category });
+    } catch (err) {
+      next(categoryError(err));
+    }
+  });
+
+
+  // Retire a built-in category while preserving every historical reference.
+  router.post('/categories/:id/retire', validateIdParam(), async (req, res, next) => {
+    try {
+      const category = await retireDefaultCategory(req.user.id, req.params.id);
+      if (!category) throw new HttpError(404, 'Built-in category not found');
+      res.json({ category });
+    } catch (err) {
+      next(categoryError(err));
+    }
+  });
+
+  // Restore a retired built-in category to new-entry selection.
+  router.post('/categories/:id/restore', validateIdParam(), async (req, res, next) => {
+    try {
+      const category = await restoreDefaultCategory(req.user.id, req.params.id);
+      if (!category) throw new HttpError(404, 'Built-in category not found');
+      res.json({ category });
+    } catch (err) {
+      next(categoryError(err));
+    }
+  });
+
+  router.delete('/categories/:id', validateIdParam(), async (req, res, next) => {
+    try {
+      const deleted = await deleteDefaultCategory(req.user.id, req.params.id);
+      if (!deleted) throw new HttpError(404, 'Built-in category not found');
+      res.status(204).end();
+    } catch (err) {
+      next(categoryError(err));
+    }
+  });
+
   return router;
+}
+
+// Turns the database's refusals into answers the screen can show.
+function categoryError(err) {
+  // 23505: another built-in category already has this name (ignoring case).
+  if (err.code === '23505') {
+    return new HttpError(409, 'A built-in category with this name already exists', {
+      code: 'CATEGORY_EXISTS',
+    });
+  }
+  // 23503: expenses, budgets or recurring payments still use it.
+  if (err.code === '23503') {
+    return new HttpError(
+      409,
+      'People are still using this category, so it cannot be removed. Rename it instead.',
+      { code: 'CATEGORY_IN_USE' },
+    );
+  }
+  return err;
 }

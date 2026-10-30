@@ -134,8 +134,19 @@ describe('2. Income & Expense Records (UC-02, UC-03)', () => {
     const user = await newUser();
     const res = await api(user).post('/api/expenses', { amount: 40, merchant: 'Metro Station', spent_on: localDay(0) });
     assert.equal(res.status, 201, `expense without a category was refused: ${res.status} "${res.body.fields?.category_id ?? res.body.error}"`);
-    return `Category suggested from the merchant: ${res.body.expense.category_id}.`;
-  }, { gap: 'Category suggestion is not reachable: the API requires category_id, so the merchant-based suggestion never runs and the form offers none (#32).' });
+    const categories = (await api(user).get('/api/categories').expect(200)).body.categories;
+    const suggested = categories.find((category) => category.id === res.body.expense.category_id);
+    assert.equal(suggested?.name, 'Transport');
+    assert.equal(res.body.expense.category_suggested, true);
+
+    // A category the user picks is never replaced by the suggestion.
+    const food = categories.find((category) => category.name === 'Food');
+    const chosen = await api(user).post('/api/expenses', {
+      amount: 40, merchant: 'Metro Station', category_id: food.id, spent_on: localDay(0),
+    }).expect(201);
+    assert.equal(chosen.body.expense.category_id, food.id);
+    return `An expense for "Metro Station" with no category was saved (201) under ${suggested.name}, suggested from the merchant name; when the user picked ${food.name} themselves, that was kept.`;
+  });
 });
 
 describe('3. Budget Management & Alerts (UC-04)', () => {

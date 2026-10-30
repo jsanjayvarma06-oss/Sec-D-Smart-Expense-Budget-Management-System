@@ -1,12 +1,39 @@
 
 import { withUser } from '../db/userScope.js';
+import { suggestCategoryName } from './merchantCategoryService.js';
+
+// Finds a category the user can use by name, preferring the built-in one.
+export async function findCategoryByName(db, userId, name) {
+  const { rows } = await db.query(
+    `SELECT id, name
+     FROM categories
+     WHERE lower(name) = lower($1)
+       AND (user_id IS NULL OR user_id = $2)
+       AND retired_at IS NULL
+     ORDER BY CASE WHEN user_id IS NULL THEN 0 ELSE 1 END
+     LIMIT 1`,
+    [name, userId],
+  );
+
+  return rows[0] ?? null;
+}
+
+// The category to suggest for a merchant name (FR05), or null.
+export async function suggestCategory(userId, merchant) {
+  const name = suggestCategoryName(merchant);
+
+  if (!name) return null;
+
+  return withUser(userId, (db) => findCategoryByName(db, userId, name));
+}
 
 export async function listCategories(userId) {
   return withUser(userId, async (db) => {
     const { rows } = await db.query(
       `SELECT id, user_id, name, created_at
        FROM categories
-       WHERE user_id IS NULL OR user_id = $1
+       WHERE (user_id IS NULL OR user_id = $1)
+         AND retired_at IS NULL
        ORDER BY
          CASE WHEN user_id IS NULL THEN 0 ELSE 1 END,
          lower(name) ASC`,

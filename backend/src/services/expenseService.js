@@ -1,6 +1,8 @@
 ﻿import { detectUnusualSpending } from './anomalyDetectionService.js';
 
 import { withUser } from '../db/userScope.js';
+import { HttpError } from '../utils/httpError.js';
+import { findCategoryByName } from './categoryService.js';
 import { suggestCategoryName } from './merchantCategoryService.js';
 
 function formatExpense(row) {
@@ -15,15 +17,16 @@ function formatExpense(row) {
 }
 
 // Resolve the category while respecting the user's manual selection.
-async function resolveCategory(db, userId, expense) {
+async function resolveCategory(db, userId, expense, existingCategoryId = null) {
   // A manually selected category always takes priority.
   if (expense.category_id) {
     const { rows } = await db.query(
       `SELECT id
        FROM categories
        WHERE id = $1
-         AND (user_id IS NULL OR user_id = $2)`,
-      [expense.category_id, userId],
+         AND (user_id IS NULL OR user_id = $2)
+         AND (retired_at IS NULL OR id = $3)`,
+      [expense.category_id, userId, existingCategoryId],
     );
 
     return rows[0]?.id ?? null;
@@ -34,24 +37,30 @@ async function resolveCategory(db, userId, expense) {
 
   if (!suggestedName) return null;
 
-  const { rows } = await db.query(
-    `SELECT id
-     FROM categories
-     WHERE lower(name) = lower($1)
-       AND (user_id IS NULL OR user_id = $2)
-     ORDER BY CASE WHEN user_id IS NULL THEN 0 ELSE 1 END
-     LIMIT 1`,
-    [suggestedName, userId],
-  );
+  const suggested = await findCategoryByName(db, userId, suggestedName);
 
-  return rows[0]?.id ?? null;
+  return suggested?.id ?? null;
+}
+
+// With no category chosen and none to suggest from the merchant, the user has
+// to pick one. (A category that was chosen but isn't theirs gets the usual
+// "invalid category" answer from the route.)
+function noCategoryError() {
+  return new HttpError(
+    400,
+    'Choose a category, or enter a merchant name we can suggest one for',
+    { code: 'INVALID_CATEGORY', fields: { category_id: 'Choose a category' } },
+  );
 }
 
 export async function createExpense(userId, expense) {
   return withUser(userId, async (db) => {
     const categoryId = await resolveCategory(db, userId, expense);
 
-    if (!categoryId) return null;
+    if (!categoryId) {
+      if (!expense.category_id) throw noCategoryError();
+      return null;
+    }
 
     const detection = await detectUnusualSpending(
       userId,
@@ -80,6 +89,8 @@ export async function createExpense(userId, expense) {
     return {
       ...formatExpense(rows[0]),
       anomaly: detection,
+      // True when the category came from the merchant name, not the user.
+      category_suggested: !expense.category_id,
     };
   });
 }
@@ -102,10 +113,6 @@ export async function listExpenses(userId) {
 
 export async function updateExpense(userId, expenseId, expense) {
   return withUser(userId, async (db) => {
-    const categoryId = await resolveCategory(db, userId, expense);
-
-    if (!categoryId) return null;
-
     const { rows: current } = await db.query(
       `SELECT amount, category_id, is_flagged
        FROM expenses
@@ -115,6 +122,13 @@ export async function updateExpense(userId, expenseId, expense) {
     );
 
     if (!current[0]) return null;
+
+    const categoryId = await resolveCategory(db, userId, expense, current[0].category_id);
+
+    if (!categoryId) {
+      if (!expense.category_id) throw noCategoryError();
+      return null;
+    }
 
     // Editing is the "fix it" half of the review flow: if the amount or
     // category changed, check the expense again so a corrected typo clears the
@@ -163,7 +177,11 @@ export async function updateExpense(userId, expenseId, expense) {
     );
 
     const updated = formatExpense(rows[0] ?? null);
-    return updated && anomaly ? { ...updated, anomaly } : updated;
+    const extras = {
+      ...(anomaly ? { anomaly } : {}),
+      category_suggested: !expense.category_id,
+    };
+    return updated ? { ...updated, ...extras } : updated;
   });
 }
 
