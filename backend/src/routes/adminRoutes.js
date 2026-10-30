@@ -7,6 +7,8 @@ import {
   deleteDefaultCategory,
   listDefaultCategories,
   renameDefaultCategory,
+  retireDefaultCategory,
+  restoreDefaultCategory,
 } from '../services/adminCategoryService.js';
 import { getAdminOverview } from '../services/adminService.js';
 import { listAdminActions, recordAdminAction } from '../services/auditLogService.js';
@@ -98,6 +100,29 @@ export function adminRoutes() {
   router.put('/categories/:id', validateIdParam(), validate(updateCategorySchema), async (req, res, next) => {
     try {
       const category = await renameDefaultCategory(req.user.id, req.params.id, req.body.name);
+      if (!category) throw new HttpError(404, 'Built-in category not found');
+      res.json({ category });
+    } catch (err) {
+      next(categoryError(err));
+    }
+  });
+
+
+  // Retire a built-in category while preserving every historical reference.
+  router.post('/categories/:id/retire', validateIdParam(), async (req, res, next) => {
+    try {
+      const category = await retireDefaultCategory(req.user.id, req.params.id);
+      if (!category) throw new HttpError(404, 'Built-in category not found');
+      res.json({ category });
+    } catch (err) {
+      next(categoryError(err));
+    }
+  });
+
+  // Restore a retired built-in category to new-entry selection.
+  router.post('/categories/:id/restore', validateIdParam(), async (req, res, next) => {
+    try {
+      const category = await restoreDefaultCategory(req.user.id, req.params.id);
       if (!category) throw new HttpError(404, 'Built-in category not found');
       res.json({ category });
     } catch (err) {
