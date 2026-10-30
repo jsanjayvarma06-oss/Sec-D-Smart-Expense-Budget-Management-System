@@ -213,7 +213,8 @@ export async function createRecurringExpense(userId, data) {
     const { rows: categories } = await db.query(
       `SELECT id FROM categories
        WHERE id = $1
-         AND (user_id IS NULL OR user_id = $2)`,
+         AND (user_id IS NULL OR user_id = $2)
+         AND retired_at IS NULL`,
       [data.category_id, userId],
     );
 
