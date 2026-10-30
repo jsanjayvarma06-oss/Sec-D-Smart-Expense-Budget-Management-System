@@ -9,6 +9,7 @@ export async function findCategoryByName(db, userId, name) {
      FROM categories
      WHERE lower(name) = lower($1)
        AND (user_id IS NULL OR user_id = $2)
+       AND retired_at IS NULL
      ORDER BY CASE WHEN user_id IS NULL THEN 0 ELSE 1 END
      LIMIT 1`,
     [name, userId],
@@ -31,7 +32,8 @@ export async function listCategories(userId) {
     const { rows } = await db.query(
       `SELECT id, user_id, name, created_at
        FROM categories
-       WHERE user_id IS NULL OR user_id = $1
+       WHERE (user_id IS NULL OR user_id = $1)
+         AND retired_at IS NULL
        ORDER BY
          CASE WHEN user_id IS NULL THEN 0 ELSE 1 END,
          lower(name) ASC`,
