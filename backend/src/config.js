@@ -1,5 +1,8 @@
 // All settings come from environment variables so secrets stay out of the repo.
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 function int(name, fallback) {
   const value = process.env[name];
   if (value === undefined || value === '') return fallback;
@@ -67,6 +70,11 @@ export const config = {
     issuer: 'Smart Expense',
     encryptionKey: twoFactorKey(),
   },
+  // Where npm run db:backup writes its files (see scripts/backup.js). The admin
+  // health screen reads the time of the newest one.
+  backupDir: path.resolve(
+    process.env.BACKUP_DIR ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '../../backups'),
+  ),
   mail: {
     // e.g. smtps://user:pass@smtp.example.com. Unset: emails go to mail_outbox.
     smtpUrl: process.env.SMTP_URL || null,

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool } from './pool.js';
 
-const migrationsDir = path.resolve(
+export const migrationsDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../../database/migrations',
 );
