@@ -11,6 +11,8 @@ const ACTION_LABELS = {
   create_default_category: 'Added a built-in category',
   rename_default_category: 'Renamed a built-in category',
   delete_default_category: 'Removed a built-in category',
+  retire_default_category: 'Retired a built-in category',
+  restore_default_category: 'Restored a built-in category',
 };
 
 const NO_FILTERS = { adminId: '', action: '', from: '', to: '' };
