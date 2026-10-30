@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import SystemHealth from './SystemHealth.jsx';
 
 // Admin panel shell (story #109). Admins manage accounts and the system, never
 // personal finances: no section here shows anyone's expenses, income, budgets
-// or notes. Each section is filled in by its own card.
+// or notes. Each section is filled in by its own card; BUILT lists the ones
+// that are done.
 const SECTIONS = [
   { id: 'users', label: 'Users', text: 'Find an account, unlock it, log it out everywhere, or disable it.', card: 113 },
   { id: 'security', label: 'Security', text: 'Failed logins, lockouts and blocked requests over the last 7 days.', card: 117 },
@@ -12,6 +14,10 @@ const SECTIONS = [
   { id: 'announcements', label: 'Announcements', text: 'Send a short notice to every user.', card: 130 },
   { id: 'audit', label: 'Audit log', text: 'Every admin action: who did it, what, to which account and when.', card: 122 },
 ];
+
+const BUILT = {
+  system: SystemHealth,
+};
 
 export default function AdminPanel({ user, apiRequest, onBack }) {
   const [section, setSection] = useState('users');
@@ -36,6 +42,7 @@ export default function AdminPanel({ user, apiRequest, onBack }) {
   }, [apiRequest]);
 
   const current = SECTIONS.find((item) => item.id === section);
+  const Section = BUILT[section];
 
   return (
     <main className="dashboard admin-panel">
@@ -90,7 +97,11 @@ export default function AdminPanel({ user, apiRequest, onBack }) {
             <section className="admin-section" aria-labelledby="admin-section-title">
               <h2 id="admin-section-title">{current.label}</h2>
               <p>{current.text}</p>
-              <p className="muted">Being built in card #{current.card}.</p>
+              {Section ? (
+                <Section apiRequest={apiRequest} />
+              ) : (
+                <p className="muted">Being built in card #{current.card}.</p>
+              )}
             </section>
           </div>
         </>

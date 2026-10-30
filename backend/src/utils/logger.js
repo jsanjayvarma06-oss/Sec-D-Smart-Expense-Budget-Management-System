@@ -14,7 +14,26 @@ function redact(value, depth = 0) {
   );
 }
 
+// Times of error entries from the last 24 hours, for the admin health screen
+// (#121). Kept in memory, so the count starts again when the server restarts.
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_TRACKED_ERRORS = 10_000;
+const recentErrors = [];
+
+function trackError(now = Date.now()) {
+  recentErrors.push(now);
+  while (recentErrors.length > MAX_TRACKED_ERRORS || recentErrors[0] < now - DAY_MS) {
+    recentErrors.shift();
+  }
+}
+
+// Number of errors logged in the last 24 hours (or since the server started).
+export function errorsInLastDay(now = Date.now()) {
+  return recentErrors.filter((time) => time >= now - DAY_MS).length;
+}
+
 function write(level, message, fields = {}) {
+  if (level === 'error') trackError();
   if (process.env.NODE_ENV === 'test' && level !== 'error') return;
   const entry = { time: new Date().toISOString(), level, message, ...redact(fields) };
   const line = JSON.stringify(entry);

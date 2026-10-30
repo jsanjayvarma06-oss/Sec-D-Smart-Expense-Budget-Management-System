@@ -97,6 +97,7 @@ describe('Audit log table (#123)', () => {
 // whoever adds it record an audit entry for it.
 const ADMIN_ROUTE_CALLS = {
   'GET /overview': { action: 'view_overview', call: (cookie) => request(app).get('/api/admin/overview').set('Cookie', cookie) },
+  'GET /health': { action: 'view_system_health', call: (cookie) => request(app).get('/api/admin/health').set('Cookie', cookie) },
 };
 
 describe('recordAdminAction is used by every admin route (#123)', () => {

@@ -545,6 +545,62 @@ h3 {
   background: #fff;
 }
 
+.system-health-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.health-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.health-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid #e4e7ec;
+  border-left-width: 4px;
+  border-radius: 10px;
+}
+
+.health-item p {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.health-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.health-state {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.health-green { border-left-color: #16805d; }
+.health-green .health-dot { background: #16805d; }
+.health-green .health-state { color: #16805d; }
+
+.health-amber { border-left-color: #dc6803; }
+.health-amber .health-dot { background: #dc6803; }
+.health-amber .health-state { color: #b54708; }
+
+.health-red { border-left-color: #d92d20; }
+.health-red .health-dot { background: #d92d20; }
+.health-red .health-state { color: #b42318; }
+
 .two-factor-setup {
   display: flex;
   flex-wrap: wrap;
