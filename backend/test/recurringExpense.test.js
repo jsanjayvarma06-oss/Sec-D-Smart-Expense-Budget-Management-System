@@ -149,4 +149,112 @@ describe('Recurring expense generation', () => {
     );
   });
 
+
+  describe('monthly payments that start at the end of a month (#53)', () => {
+    async function dueDates(userId, id) {
+      const { rows } = await query(
+        `SELECT spent_on::text AS spent_on FROM expenses
+         WHERE recurring_expense_id = $1 ORDER BY spent_on`,
+        [id],
+      );
+      return rows.map((row) => row.spent_on);
+    }
+
+    test('31 Jan, 28 Feb, 31 Mar: the day comes back after a short month', async () => {
+      const user = await createUser();
+      const recurring = await createRecurringExpense(user.id, {
+        cycle: 'monthly', startDate: '2026-01-31', nextDueDate: '2026-01-31',
+      });
+
+      await generateDueRecurringExpenses(user.id, '2026-05-31');
+
+      assert.deepEqual(await dueDates(user.id, recurring.id), [
+        '2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31',
+      ]);
+      const { rows } = await query(
+        'SELECT next_due_date::text AS next FROM recurring_expenses WHERE id = $1',
+        [recurring.id],
+      );
+      assert.equal(rows[0].next, '2026-06-30');
+    });
+
+    test('a payment on the 30th is only moved in February', async () => {
+      const user = await createUser();
+      const recurring = await createRecurringExpense(user.id, {
+        cycle: 'monthly', startDate: '2026-01-30', nextDueDate: '2026-01-30',
+      });
+
+      await generateDueRecurringExpenses(user.id, '2026-04-30');
+
+      assert.deepEqual(await dueDates(user.id, recurring.id), [
+        '2026-01-30', '2026-02-28', '2026-03-30', '2026-04-30',
+      ]);
+    });
+
+    test('a leap year keeps 29 February, then returns to the 29th', async () => {
+      const user = await createUser();
+      const recurring = await createRecurringExpense(user.id, {
+        cycle: 'monthly', startDate: '2028-01-29', nextDueDate: '2028-01-29',
+      });
+
+      await generateDueRecurringExpenses(user.id, '2028-03-29');
+
+      assert.deepEqual(await dueDates(user.id, recurring.id), [
+        '2028-01-29', '2028-02-29', '2028-03-29',
+      ]);
+    });
+
+    test('the day survives a change of year', async () => {
+      const user = await createUser();
+      const recurring = await createRecurringExpense(user.id, {
+        cycle: 'monthly', startDate: '2026-11-30', nextDueDate: '2026-11-30',
+      });
+
+      await generateDueRecurringExpenses(user.id, '2027-03-30');
+
+      assert.deepEqual(await dueDates(user.id, recurring.id), [
+        '2026-11-30', '2026-12-30', '2027-01-30', '2027-02-28', '2027-03-30',
+      ]);
+    });
+
+    test('a later run carries on from the saved date and still returns to the 31st', async () => {
+      const user = await createUser();
+      const recurring = await createRecurringExpense(user.id, {
+        cycle: 'monthly', startDate: '2026-01-31', nextDueDate: '2026-01-31',
+      });
+
+      await generateDueRecurringExpenses(user.id, '2026-02-28');
+      await generateDueRecurringExpenses(user.id, '2026-04-30');
+
+      assert.deepEqual(await dueDates(user.id, recurring.id), [
+        '2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30',
+      ]);
+    });
+
+    test('a payment that started mid-month is unchanged', async () => {
+      const user = await createUser();
+      const recurring = await createRecurringExpense(user.id, {
+        cycle: 'monthly', startDate: '2026-01-15', nextDueDate: '2026-01-15',
+      });
+
+      await generateDueRecurringExpenses(user.id, '2026-03-15');
+
+      assert.deepEqual(await dueDates(user.id, recurring.id), [
+        '2026-01-15', '2026-02-15', '2026-03-15',
+      ]);
+    });
+
+    test('weekly payments still move seven days at a time', async () => {
+      const user = await createUser();
+      const recurring = await createRecurringExpense(user.id, {
+        cycle: 'weekly', startDate: '2026-01-31', nextDueDate: '2026-01-31',
+      });
+
+      await generateDueRecurringExpenses(user.id, '2026-02-14');
+
+      assert.deepEqual(await dueDates(user.id, recurring.id), [
+        '2026-01-31', '2026-02-07', '2026-02-14',
+      ]);
+    });
+  });
 });

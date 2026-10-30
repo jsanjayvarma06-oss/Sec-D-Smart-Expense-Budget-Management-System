@@ -10,16 +10,21 @@ function toDateString(value) {
     : String(value).slice(0, 10);
 }
 
-function nextCycleDate(date, cycle) {
-  const [year, month, day] = date.split('-').map(Number);
+// `anchorDay` is the day of the month the payment started on. A monthly payment
+// that starts on the 31st falls on the last day of shorter months and returns
+// to the 31st afterwards (31 Jan, 28 Feb, 31 Mar), instead of drifting to the
+// 28th for good.
+function nextCycleDate(date, cycle, anchorDay = null) {
+  const [year, month, dueDay] = date.split('-').map(Number);
 
   if (cycle === 'weekly') {
-    const next = new Date(Date.UTC(year, month - 1, day + 7));
+    const next = new Date(Date.UTC(year, month - 1, dueDay + 7));
     return next.toISOString().slice(0, 10);
   }
 
   if (cycle === 'monthly') {
-    // Keep the day when possible; otherwise use the month's last day.
+    // Keep the starting day when possible; otherwise use the month's last day.
+    const day = anchorDay ?? dueDay;
     const targetMonth = month;
     const lastDay = new Date(Date.UTC(year, targetMonth + 1, 0)).getUTCDate();
     const nextDay = Math.min(day, lastDay);
@@ -45,6 +50,7 @@ export async function generateDueRecurringExpenses(userId, today) {
   return withUser(userId, async (db) => {
     const { rows: recurringExpenses } = await db.query(
       `SELECT id, user_id, category_id, amount, cycle,
+              start_date::text AS start_date,
               next_due_date::text AS next_due_date, note
        FROM recurring_expenses
        WHERE user_id = $1
@@ -59,6 +65,7 @@ export async function generateDueRecurringExpenses(userId, today) {
 
     for (const recurring of recurringExpenses) {
       let dueDate = toDateString(recurring.next_due_date);
+      const anchorDay = Number(recurring.start_date.slice(8, 10));
       let cycles = 0;
 
       // Generate every overdue cycle, not just the latest one, up to a cap per
@@ -93,7 +100,7 @@ export async function generateDueRecurringExpenses(userId, today) {
           });
         }
 
-        dueDate = nextCycleDate(dueDate, recurring.cycle);
+        dueDate = nextCycleDate(dueDate, recurring.cycle, anchorDay);
       }
 
       await db.query(

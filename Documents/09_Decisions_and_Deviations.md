@@ -91,7 +91,6 @@ These acceptance criteria in `01_SRS_Document.pdf` should read as follows once t
 | UC-07 10a–10b | Overdue payments are marked and highlighted | Built: a missed payment is labelled overdue on the dashboard, gets one follow-up notification, and "Mark as paid" stops the reminders and the overdue label | Added | Dinesh (#52) |
 | FR19 / UC-08 | Simulate a planned purchase; verdict affordable / not affordable; never saved | Simulates a proposed budget and income instead; no purchase input or verdict (UT_29, UT_30). It's never saved (UT_31 passes). No screen | Open | Dinesh (#47) |
 | FR20 / UC-10 | Export a report as PDF or CSV | Not built (UT_32, UT_33, ST_05) | Open | Jahnavi (#54, #55) |
-| Recurring monthly dates | (implied) a payment on the 31st stays on the last day of each month | Drifts: 31 Jan → 28 Feb → 28 Mar | Open | Recurring (#53); no card yet |
 | Record IDs in URLs | Malformed IDs answer 404 like missing records | Some routes answer 400 | Open | Minor, no card yet |
 
 ### Secure Architecture Design (SAD)
