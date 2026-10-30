@@ -295,7 +295,7 @@ describe('Admin: built-in categories (#129)', () => {
 
   describe('retiring and restoring', () => {
     test('hides a retired category from new-entry choices but preserves historical expenses and budgets', async () => {
-      const { admin, retire, list, restore } = await setupAdmin();
+      const { admin, retire, restore } = await setupAdmin();
       const user = await createUser('retirement@test.com');
       const cookie = await loginAs(user);
       const food = await builtIn('Food');
