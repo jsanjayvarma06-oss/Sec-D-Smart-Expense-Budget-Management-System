@@ -123,7 +123,7 @@ export async function updateExpense(userId, expenseId, expense) {
 
     if (!current[0]) return null;
 
-    const categoryId = await resolveCategory(db, userId, expense);
+    const categoryId = await resolveCategory(db, userId, expense, current[0].category_id);
 
     if (!categoryId) {
       if (!expense.category_id) throw noCategoryError();
