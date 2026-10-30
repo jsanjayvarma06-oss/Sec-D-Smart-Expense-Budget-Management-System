@@ -17,7 +17,7 @@ function formatExpense(row) {
 }
 
 // Resolve the category while respecting the user's manual selection.
-async function resolveCategory(db, userId, expense) {
+async function resolveCategory(db, userId, expense, existingCategoryId = null) {
   // A manually selected category always takes priority.
   if (expense.category_id) {
     const { rows } = await db.query(
@@ -25,8 +25,8 @@ async function resolveCategory(db, userId, expense) {
        FROM categories
        WHERE id = $1
          AND (user_id IS NULL OR user_id = $2)
-         AND retired_at IS NULL`,
-      [expense.category_id, userId],
+         AND (retired_at IS NULL OR id = $3)`,
+      [expense.category_id, userId, existingCategoryId],
     );
 
     return rows[0]?.id ?? null;
@@ -55,7 +55,7 @@ function noCategoryError() {
 
 export async function createExpense(userId, expense) {
   return withUser(userId, async (db) => {
-    const categoryId = await resolveCategory(db, userId, expense);
+    const categoryId = await resolveCategory(db, userId, expense, current[0].category_id);
 
     if (!categoryId) {
       if (!expense.category_id) throw noCategoryError();
