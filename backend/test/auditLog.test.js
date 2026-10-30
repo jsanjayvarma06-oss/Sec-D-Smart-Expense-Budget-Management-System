@@ -112,6 +112,20 @@ const ADMIN_ROUTE_CALLS = {
       .set('Cookie', cookie)
       .send({ name: 'Audit probe renamed' }),
   },
+  'POST /categories/:id/retire': {
+    action: 'retire_default_category',
+    call: async (cookie) => request(app)
+      .post(`/api/admin/categories/${await probeCategory()}/retire`)
+      .set('Cookie', cookie),
+  },
+  'POST /categories/:id/restore': {
+    action: 'restore_default_category',
+    call: async (cookie) => {
+      const id = await probeCategory();
+      await query('UPDATE categories SET retired_at = now() WHERE id = $1', [id]);
+      return request(app).post(`/api/admin/categories/${id}/restore`).set('Cookie', cookie);
+    },
+  },
   'DELETE /categories/:id': {
     action: 'delete_default_category',
     status: 204,
