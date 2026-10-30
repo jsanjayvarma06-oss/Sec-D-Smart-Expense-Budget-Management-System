@@ -55,7 +55,7 @@ function noCategoryError() {
 
 export async function createExpense(userId, expense) {
   return withUser(userId, async (db) => {
-    const categoryId = await resolveCategory(db, userId, expense, current[0].category_id);
+    const categoryId = await resolveCategory(db, userId, expense);
 
     if (!categoryId) {
       if (!expense.category_id) throw noCategoryError();
