@@ -17,7 +17,7 @@ let snapshot = [];
 
 beforeEach(async () => {
   snapshot = (await query(
-    'SELECT id, name, created_at FROM categories WHERE user_id IS NULL',
+    'SELECT id, name, created_at, retired_at FROM categories WHERE user_id IS NULL',
   )).rows;
 });
 
@@ -30,9 +30,9 @@ afterEach(async () => {
   );
   for (const row of snapshot) {
     await query(
-      `INSERT INTO categories (id, user_id, name, created_at) VALUES ($1, NULL, $2, $3)
-       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
-      [row.id, row.name, row.created_at],
+      `INSERT INTO categories (id, user_id, name, created_at, retired_at) VALUES ($1, NULL, $2, $3, $4)
+       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, retired_at = EXCLUDED.retired_at`,
+      [row.id, row.name, row.created_at, row.retired_at],
     );
   }
 });
@@ -49,6 +49,8 @@ async function setupAdmin() {
     add: (name) => request(app).post('/api/admin/categories').set('Cookie', cookie).send({ name }),
     rename: (id, name) => request(app).put(`/api/admin/categories/${id}`).set('Cookie', cookie).send({ name }),
     remove: (id) => request(app).delete(`/api/admin/categories/${id}`).set('Cookie', cookie),
+    retire: (id) => request(app).post(`/api/admin/categories/${id}/retire`).set('Cookie', cookie),
+    restore: (id) => request(app).post(`/api/admin/categories/${id}/restore`).set('Cookie', cookie),
   };
 }
 
@@ -287,6 +289,59 @@ describe('Admin: built-in categories (#129)', () => {
 
       const removed = (await entriesBy(admin.id)).filter((row) => row.action === 'delete_default_category');
       assert.deepEqual(removed.map((row) => row.details.category), ['Pet care', 'Food']);
+    });
+  });
+
+
+  describe('retiring and restoring', () => {
+    test('hides a retired category from new-entry choices but preserves historical expenses and budgets', async () => {
+      const { admin, retire, list, restore } = await setupAdmin();
+      const user = await createUser('retirement@test.com');
+      const cookie = await loginAs(user);
+      const food = await builtIn('Food');
+
+      await request(app).post('/api/expenses').set('Cookie', cookie)
+        .send({ amount: 125, category_id: food, spent_on: '2026-10-05' }).expect(201);
+      await request(app).post('/api/budgets').set('Cookie', cookie)
+        .send({ month: '2026-10', amount: 500, category_id: food }).expect(201);
+
+      await retire(food).expect(200);
+      const categories = (await request(app).get('/api/categories').set('Cookie', cookie).expect(200)).body.categories;
+      assert.ok(!categories.some((category) => category.id === food));
+
+      await request(app).post('/api/expenses').set('Cookie', cookie)
+        .send({ amount: 25, category_id: food, spent_on: '2026-10-06' }).expect(400);
+      await request(app).post('/api/budgets').set('Cookie', cookie)
+        .send({ month: '2026-10', amount: 200, category_id: food }).expect(400);
+      await request(app).post('/api/recurring-expenses').set('Cookie', cookie)
+        .send({ category_id: food, amount: 20, cycle: 'monthly', start_date: '2026-10-30' }).expect(400);
+
+      const expenses = (await request(app).get('/api/expenses').set('Cookie', cookie).expect(200)).body.expenses;
+      assert.equal(expenses.length, 1);
+      assert.equal(expenses[0].category_id, food);
+      const budgets = (await request(app).get('/api/budgets').query({ month: '2026-10' }).set('Cookie', cookie).expect(200)).body.budgets;
+      assert.equal(budgets.length, 1);
+      assert.equal(budgets[0].category_id, food);
+
+      const audit = await entriesBy(admin.id);
+      assert.ok(audit.some((entry) => entry.action === 'retire_default_category'
+        && entry.details.category_id === food));
+
+      await restore(food).expect(200);
+      const restored = (await request(app).get('/api/categories').set('Cookie', cookie).expect(200)).body.categories;
+      assert.ok(restored.some((category) => category.id === food));
+      assert.ok((await entriesBy(admin.id)).some((entry) => entry.action === 'restore_default_category'));
+    });
+
+    test('cannot retire a custom category and reports missing categories', async () => {
+      const user = await createUser('custom@test.com');
+      const { rows } = await query(
+        `INSERT INTO categories (user_id, name) VALUES ($1, 'Custom') RETURNING id`,
+        [user.id],
+      );
+      const { retire, restore } = await setupAdmin();
+      await retire(rows[0].id).expect(404);
+      await restore('00000000-0000-4000-8000-000000000000').expect(404);
     });
   });
 
