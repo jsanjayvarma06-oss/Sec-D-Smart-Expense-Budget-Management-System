@@ -101,6 +101,24 @@ export default function AdminCategories({ apiRequest }) {
     if (saved) setEditingId('');
   }
 
+  async function handleRetire(category) {
+    const confirmed = window.confirm(
+      `Retire "${category.name}"? It will disappear from new-entry choices, but existing expenses and budgets will remain unchanged. You can restore it later.`,
+    );
+    if (!confirmed) return;
+    await change(
+      () => apiRequest(`/api/admin/categories/${encodeURIComponent(category.id)}/retire`, { method: 'POST' }),
+      `Retired "${category.name}". Existing records are unchanged.`,
+    );
+  }
+
+  async function handleRestore(category) {
+    await change(
+      () => apiRequest(`/api/admin/categories/${encodeURIComponent(category.id)}/restore`, { method: 'POST' }),
+      `Restored "${category.name}" to new-entry choices.`,
+    );
+  }
+
   async function handleRemove(category) {
     const warning = suggestionNames.includes(category.name)
       ? ` Merchant names will no longer suggest "${category.name}".`
@@ -120,8 +138,7 @@ export default function AdminCategories({ apiRequest }) {
     <div className="admin-categories">
       <p className="muted">
         These are the categories every user sees. You see names only, never anyone&apos;s spending.
-        Renaming a category changes it for everyone. A category that people are still using
-        cannot be removed, so rename it instead.
+        Renaming a category changes it for everyone. Retiring hides a category from new entries while preserving existing records. Remove remains available only when no records use the category.
       </p>
 
       {error && <p className="error-message" role="alert">{error}</p>}
@@ -152,6 +169,7 @@ export default function AdminCategories({ apiRequest }) {
             <thead>
               <tr>
                 <th>Category</th>
+                <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -189,6 +207,7 @@ export default function AdminCategories({ apiRequest }) {
                       </>
                     )}
                   </td>
+                  <td>{category.retired_at ? 'Retired' : 'Active'}</td>
                   <td>
                     {editingId !== category.id && (
                       <div className="table-actions">
@@ -200,6 +219,25 @@ export default function AdminCategories({ apiRequest }) {
                         >
                           Rename
                         </button>
+                        {category.retired_at ? (
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => handleRestore(category)}
+                            disabled={busy}
+                          >
+                            Restore
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => handleRetire(category)}
+                            disabled={busy}
+                          >
+                            Retire
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="danger-button"
