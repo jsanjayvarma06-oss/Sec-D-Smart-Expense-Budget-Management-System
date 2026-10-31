@@ -51,19 +51,19 @@ export async function getUsageDashboard() {
   const { rows: categoryRows } = await query(
     `WITH category_usage AS (
        SELECT
-         CASE WHEN c.user_id IS NULL THEN c.name ELSE 'Other' END AS category_name,
+         CASE WHEN c.user_id IS NULL THEN c.name ELSE NULL END AS category_name,
          COUNT(*)::integer AS expense_count,
          COUNT(DISTINCT e.user_id)::integer AS user_count
        FROM expenses e
        JOIN categories c ON c.id = e.category_id
        WHERE e.created_at >= CURRENT_DATE - INTERVAL '29 days'
          AND e.created_at < CURRENT_DATE + INTERVAL '1 day'
-       GROUP BY CASE WHEN c.user_id IS NULL THEN c.name ELSE 'Other' END
+       GROUP BY CASE WHEN c.user_id IS NULL THEN c.name ELSE NULL END
      ),
      visible AS (
        SELECT category_name, expense_count, user_count
        FROM category_usage
-       WHERE category_name <> 'Other' AND user_count >= 5
+       WHERE category_name IS NOT NULL AND user_count >= 5
      ),
      hidden AS (
        SELECT
@@ -77,7 +77,7 @@ export async function getUsageDashboard() {
            c.user_id IS NOT NULL
            OR c.name IN (
              SELECT category_name FROM category_usage
-             WHERE category_name <> 'Other' AND user_count < 5
+             WHERE category_name IS NOT NULL AND user_count < 5
            )
          )
      )
