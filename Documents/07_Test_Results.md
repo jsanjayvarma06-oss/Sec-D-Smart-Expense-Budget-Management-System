@@ -3,7 +3,7 @@
 Smart Expense & Budget Management System. Results for the 50 cases in
 `04_Test_Plan.pdf`, plus the NFR04 calculation check.
 
-**Run:** 2026-10-30, Node.js v22.23.4, PostgreSQL 17, through the real API
+**Run:** 2026-10-31, Node.js v22.20.0, PostgreSQL 17, through the real API
 (`npm run test:plan -w backend`). Each case is an automated test named after its ID in
 `backend/test/plan/`. The Actual Result column is what that test observed in this run.
 
@@ -14,10 +14,10 @@ and are not counted as passing.
 
 | Result | Cases |
 |---|---|
-| Pass | 41 |
+| Pass | 44 |
 | Fail (known gap, tracked on the board) | 4 |
 | Fail | 0 |
-| Not run (feature not built) | 5 |
+| Not run (feature not built) | 2 |
 | **Total** | **50** |
 
 ## Unit tests (UT)
@@ -47,10 +47,10 @@ and are not counted as passing.
 | UT_21 | Anomaly Detection | Test that a normal expense is not flagged | The entry is saved normally with no flag | ₹350 saved normally with no flag. | Pass |
 | UT_22 | Prediction | Test the monthly expenditure forecast (FR12) | A forecast is shown in a sensible range with the months it is based on | Forecast ₹8,500 for this month, based on 2026-07: ₹8,000, 2026-08: ₹8,500, 2026-09: ₹9,000. | Pass |
 | UT_23 | Prediction | Test the forecast for a new account with no history | No forecast is shown, instead a message saying more history is needed | No forecast; message: "At least 3 months of spending history are required". | Pass |
-| UT_24 | Savings Goals | Test creating a savings goal (FR14) | The goal is created and shows 0% progress | Savings goals are not built yet (#50). | Not run (not built) |
-| UT_25 | Savings Goals | Test the time-to-goal estimate (FR15) | An estimate of about 10 months is shown | Time-to-goal estimate is not built yet (#51). | Not run (not built) |
-| UT_26 | Savings Goals | Test the estimate when nothing is being saved | No number is shown, instead a message that the goal cannot be reached at the current rate | Time-to-goal estimate is not built yet (#51). | Not run (not built) |
-| UT_27 | Recurring Expenses | Test creating a recurring expense (FR16) | The recurring expense is saved and listed with its next due date | Monthly Rent of ₹6,000 saved and listed with next due date 2026-10-30. | Pass |
+| UT_24 | Savings Goals | Test creating a savings goal (FR14) | The goal is created and shows 0% progress | Created "Emergency Fund" with target ₹10,000 and saved amount ₹2,500. Progress is 25% and remaining amount is ₹7,500. The goal also appears in the savings-goals list. | Pass |
+| UT_25 | Savings Goals | Test the time-to-goal estimate (FR15) | An estimate of about 10 months is shown | Average monthly savings is ₹6,000. With ₹15,000 remaining, the estimated completion time is 3 months. | Pass |
+| UT_26 | Savings Goals | Test the estimate when nothing is being saved | No number is shown, instead a message that the goal cannot be reached at the current rate | The goal has ₹8,000 remaining, but there is no positive savings history. The system correctly displays "Not enough savings data to estimate completion." instead of inventing a completion date. | Pass |
+| UT_27 | Recurring Expenses | Test creating a recurring expense (FR16) | The recurring expense is saved and listed with its next due date | Monthly Rent of ₹6,000 saved and listed with next due date 2026-10-31. | Pass |
 | UT_28 | Recurring Expenses | Test that a recurring expense is not created twice in one cycle | Exactly one entry is created for the new cycle, not two | First run created 1, a repeat in the same cycle created 0: exactly one entry. | Pass |
 | UT_29 | What-If Simulator | Test simulating an affordable purchase (FR19) | The result shows the budget left after the purchase and marks it as affordable | planned purchase refused: 400 "Provide a valid month, proposed budget, and proposed income" | Fail (known gap) |
 | UT_30 | What-If Simulator | Test simulating a purchase the user cannot afford | The result warns that the purchase goes past the budget and shows the shortfall | planned purchase refused: 400 "Provide a valid month, proposed budget, and proposed income" | Fail (known gap) |
@@ -70,8 +70,8 @@ and are not counted as passing.
 | IT_06 | Budget + Alerts | Check the alert when the budget is crossed | An over-budget alert is shown and the remaining budget is displayed as -300 | Over-budget alert: "Budget limit reached or exceeded."; remaining budget −₹300. | Pass |
 | IT_07 | Budget + Notification | Check that only one alert is sent per threshold crossing | No duplicate alerts are sent for the same threshold | Budget crossed, then two more expenses (₹50, ₹80) with alerts checked each time: 1 over-budget notification in total. | Pass |
 | IT_08 | Prediction + Recommendation | Check the recommended budget stays within income (FR13) | A category-wise suggestion is shown and the total does not exceed the income | suggested Food ₹5,000, Transport ₹35,500 (total ₹40,500) against a monthly income of ₹15,000; the API reports monthly income as ₹45,000 | Fail (known gap) |
-| IT_09 | Recurring + Reminder | Check the reminder before a due date (FR17) | A reminder is shown for the upcoming payment | Payment due in 3 days: reminder created, "Payment of 499.00 is due on 2026-11-02." | Pass |
-| IT_10 | Recurring + Reminder | Check that reminders stop once the payment is marked paid | The reminder no longer appears for that cycle | Payment due 2026-10-31 marked paid; checking reminders again created 0. | Pass |
+| IT_09 | Recurring + Reminder | Check the reminder before a due date (FR17) | A reminder is shown for the upcoming payment | Payment due in 3 days: reminder created, "Payment of 499.00 is due on 2026-11-03." | Pass |
+| IT_10 | Recurring + Reminder | Check that reminders stop once the payment is marked paid | The reminder no longer appears for that cycle | Payment due 2026-11-01 marked paid; checking reminders again created 0. | Pass |
 | IT_11 | Input Validation | Check that unsafe input is rejected (SR05) | The input is rejected or escaped, and nothing is executed when the entry is opened | The note is stored as plain text and returned as JSON. The React UI shows it as text (no raw HTML insertion anywhere), so the script tag is displayed, not run. | Pass |
 
 ## System tests (ST)
@@ -93,9 +93,6 @@ and are not counted as passing.
 
 ## What needs to happen for the remaining cases
 
-- **UT_24**: Savings goals are not built yet (#50).
-- **UT_25**: Time-to-goal estimate is not built yet (#51).
-- **UT_26**: Time-to-goal estimate is not built yet (#51).
 - **UT_29**: The what-if simulator takes a proposed budget and income, not a planned purchase, and gives no affordable/not-affordable verdict (#47, UC-08).
 - **UT_30**: The what-if simulator takes a proposed budget and income, not a planned purchase, and gives no affordable/not-affordable verdict (#47, UC-08).
 - **UT_32**: Report export is not built yet (#54 CSV, #55 PDF).

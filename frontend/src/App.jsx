@@ -389,6 +389,15 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
   const [categoryBudgetSaving, setCategoryBudgetSaving] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [categorySaving, setCategorySaving] = useState(false);
+  const [savingsGoals, setSavingsGoals] = useState([]);
+const [savingsGoalForm, setSavingsGoalForm] = useState({
+  name: '',
+  target_amount: '',
+  saved_amount: '',
+  target_date: '',
+});
+const [editingSavingsGoalId, setEditingSavingsGoalId] = useState(null);
+const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
 
   const refreshData = useCallback(() => {
     setRefreshVersion((version) => version + 1);
@@ -402,8 +411,17 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
       setError('');
 
       try {
-        const [budgetResult, categoryResult, expenseResult, recurringResult, alertResult, healthResult, forecastResult] =
-          await Promise.all([
+        const [
+          budgetResult,
+          categoryResult,
+          expenseResult,
+          recurringResult,
+          alertResult,
+          healthResult,
+          forecastResult,
+          savingsGoalResult,
+        ] = await Promise.all([
+      
             apiRequest(
               `/api/budgets/remaining?month=${encodeURIComponent(month)}`,
             ),
@@ -417,6 +435,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
               `/api/financial-health?month=${encodeURIComponent(month)}`,
             ),
             apiRequest('/api/forecast/monthly'),
+            apiRequest('/api/savings-goals'),
           ]);
 
         if (!active) return;
@@ -424,6 +443,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
         setBudgets(budgetResult.remainingBudgets || []);
         setCategories(categoryResult.categories || []);
         setExpenses(expenseResult.expenses || []);
+        setSavingsGoals(savingsGoalResult.savingsGoals || []);
         setRecurringExpenses(recurringResult.recurringExpenses || []);
         setBudgetAlerts(alertResult.alerts || []);
         setFinancialHealth(healthResult.health || null);
@@ -714,8 +734,121 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
       setError(err.message || 'Could not review expense.');
     }
   }
-
-
+  function cancelSavingsGoalEditing() {
+    setEditingSavingsGoalId(null);
+    setSavingsGoalForm({
+      name: '',
+      target_amount: '',
+      saved_amount: '',
+      target_date: '',
+    });
+  }
+  
+  function handleEditSavingsGoal(goal) {
+    setEditingSavingsGoalId(goal.id);
+  
+    setSavingsGoalForm({
+      name: goal.name || '',
+      target_amount: String(goal.target_amount ?? ''),
+      saved_amount: String(goal.saved_amount ?? ''),
+      target_date: goal.target_date
+        ? String(goal.target_date).slice(0, 10)
+        : '',
+    });
+  }
+  
+  async function handleSavingsGoalSubmit(event) {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+  
+    const targetAmount = Number(savingsGoalForm.target_amount);
+    const savedAmount = Number(savingsGoalForm.saved_amount || 0);
+  
+    if (!savingsGoalForm.name.trim()) {
+      setError('Please enter a savings goal name.');
+      return;
+    }
+  
+    if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
+      setError('Target amount must be greater than zero.');
+      return;
+    }
+  
+    if (!Number.isFinite(savedAmount) || savedAmount < 0) {
+      setError('Saved amount cannot be negative.');
+      return;
+    }
+  
+    if (savedAmount > targetAmount) {
+      setError('Saved amount cannot be greater than the target amount.');
+      return;
+    }
+  
+    setSavingsGoalSaving(true);
+  
+    const payload = {
+      name: savingsGoalForm.name.trim(),
+      target_amount: targetAmount,
+      saved_amount: savedAmount,
+      target_date: savingsGoalForm.target_date || null,
+    };
+  
+    try {
+      if (editingSavingsGoalId) {
+        await apiRequest(
+          `/api/savings-goals/${encodeURIComponent(editingSavingsGoalId)}`,
+          {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+          },
+        );
+  
+        setMessage('Savings goal updated successfully.');
+      } else {
+        await apiRequest('/api/savings-goals', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+  
+        setMessage('Savings goal created successfully.');
+      }
+  
+      cancelSavingsGoalEditing();
+      refreshData();
+    } catch (err) {
+      setError(err.message || 'Could not save savings goal.');
+    } finally {
+      setSavingsGoalSaving(false);
+    }
+  }
+  
+  async function handleDeleteSavingsGoal(goal) {
+    const confirmed = window.confirm(
+      `Delete the savings goal "${goal.name}"? This cannot be undone.`,
+    );
+  
+    if (!confirmed) return;
+  
+    setError('');
+    setMessage('');
+  
+    try {
+      await apiRequest(
+        `/api/savings-goals/${encodeURIComponent(goal.id)}`,
+        { method: 'DELETE' },
+      );
+  
+      if (editingSavingsGoalId === goal.id) {
+        cancelSavingsGoalEditing();
+      }
+  
+      setMessage('Savings goal deleted successfully.');
+      refreshData();
+    } catch (err) {
+      setError(err.message || 'Could not delete savings goal.');
+    }
+  }
   async function handleBudgetSubmit(event) {
     event.preventDefault();
     setError('');
@@ -1159,7 +1292,189 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
           </div>
         )}
       </section>
+      <section className="budget-alerts savings-goals-section" aria-label="Savings goals">
+  <h2>Savings Goals</h2>
+  <p>Set a savings target, track your progress, and plan your savings.</p>
 
+  <form onSubmit={handleSavingsGoalSubmit} className="expense-form">
+    <label>
+      Goal name
+      <input
+        type="text"
+        maxLength="100"
+        value={savingsGoalForm.name}
+        onChange={(event) =>
+          setSavingsGoalForm((current) => ({
+            ...current,
+            name: event.target.value,
+          }))
+        }
+        placeholder="e.g. Buy a laptop"
+        required
+      />
+    </label>
+
+    <label>
+      Target amount (₹)
+      <input
+        type="number"
+        min="0.01"
+        step="0.01"
+        value={savingsGoalForm.target_amount}
+        onChange={(event) =>
+          setSavingsGoalForm((current) => ({
+            ...current,
+            target_amount: event.target.value,
+          }))
+        }
+        placeholder="Enter target amount"
+        required
+      />
+    </label>
+
+    <label>
+      Already saved (₹)
+      <input
+        type="number"
+        min="0"
+        step="0.01"
+        value={savingsGoalForm.saved_amount}
+        onChange={(event) =>
+          setSavingsGoalForm((current) => ({
+            ...current,
+            saved_amount: event.target.value,
+          }))
+        }
+        placeholder="Enter saved amount"
+      />
+    </label>
+
+    <label>
+      Target date (optional)
+      <input
+        type="date"
+        value={savingsGoalForm.target_date}
+        onChange={(event) =>
+          setSavingsGoalForm((current) => ({
+            ...current,
+            target_date: event.target.value,
+          }))
+        }
+      />
+    </label>
+
+    <div className="savings-goal-form-actions">
+      <button type="submit" disabled={savingsGoalSaving}>
+        {savingsGoalSaving
+          ? 'Saving...'
+          : editingSavingsGoalId
+            ? 'Update goal'
+            : 'Add savings goal'}
+      </button>
+
+      {editingSavingsGoalId && (
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={cancelSavingsGoalEditing}
+        >
+          Cancel
+        </button>
+      )}
+    </div>
+  </form>
+
+  <h3>Your savings goals ({savingsGoals.length})</h3>
+
+  {savingsGoals.length === 0 ? (
+    <p>No savings goals yet. Create your first goal above!</p>
+  ) : (
+    <div className="summary-grid">
+      {savingsGoals.map((goal) => {
+        const target = Number(goal.target_amount) || 0;
+        const saved = Number(goal.saved_amount) || 0;
+        const remaining = Math.max(target - saved, 0);
+        const progress = target > 0
+          ? Math.min(Math.max((saved / target) * 100, 0), 100)
+          : 0;
+
+        return (
+          <article className="summary-card savings-goal-card" key={goal.id}>
+            <h3>{goal.name}</h3>
+
+            <p>
+              Target: <strong>{formatCurrency(target)}</strong>
+            </p>
+
+            <p>
+              Saved: <strong>{formatCurrency(saved)}</strong>
+            </p>
+
+            <p>
+              Remaining: <strong>{formatCurrency(remaining)}</strong>
+            </p>
+
+            <div className="savings-goal-progress-heading">
+              <span>Progress</span>
+              <strong>{progress.toFixed(1)}%</strong>
+            </div>
+
+            <div
+              className="savings-goal-progress-track"
+              role="progressbar"
+              aria-valuenow={Math.round(progress)}
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-label={`${goal.name} progress`}
+            >
+              <div
+                className="savings-goal-progress-fill"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+
+            {goal.target_date && (
+              <p>Target date: {String(goal.target_date).slice(0, 10)}</p>
+            )}
+
+            <p>
+              Status:{' '}
+              <strong>
+                {goal.status === 'completed'
+                  ? 'Completed'
+                  : goal.status === 'archived'
+                    ? 'Archived'
+                    : 'Active'}
+              </strong>
+            </p>
+
+            {goal.estimate_message && (
+              <p>{goal.estimate_message}</p>
+            )}
+
+            <div className="savings-goal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => handleEditSavingsGoal(goal)}
+              >
+                Edit
+              </button>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => handleDeleteSavingsGoal(goal)}
+              >
+                Delete
+              </button>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  )}
+</section>
       <SubscriptionsCard
         subscriptions={subscriptions}
         savingKey={subscriptionSaving}
