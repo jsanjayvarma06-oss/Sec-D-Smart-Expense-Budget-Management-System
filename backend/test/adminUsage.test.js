@@ -58,7 +58,8 @@ describe('GET /api/admin/usage (#125, #126)', () => {
     assert.equal(usage.daily.at(-1).new_signups, null);
     assert.equal(usage.daily.at(-1).expenses_suppressed, true);
     assert.equal(usage.daily.at(-1).expenses_added, null);
-    assert.equal(usage.weekly_active_users, 2);
+    assert.equal(usage.weekly_active_users, null);
+    assert.equal(usage.weekly_active_users_suppressed, true);
   });
 
   test('shows only categories used by at least five users and safely combines smaller groups', async () => {
@@ -101,6 +102,7 @@ describe('GET /api/admin/usage (#125, #126)', () => {
 
     for (let index = 0; index < 5; index += 1) {
       const user = await createUser(`daily-${index}@test.com`);
+      await loginAs(user);
       await addExpense(user.id, food);
     }
 
@@ -111,5 +113,7 @@ describe('GET /api/admin/usage (#125, #126)', () => {
     assert.equal(today.new_signups, 6); // five users plus the admin account
     assert.equal(today.expenses_suppressed, false);
     assert.equal(today.expenses_added, 5);
+    assert.equal(body.usage.weekly_active_users, 6);
+    assert.equal(body.usage.weekly_active_users_suppressed, false);
   });
 });
