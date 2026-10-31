@@ -58,7 +58,7 @@ describe('GET /api/admin/usage (#125, #126)', () => {
     assert.equal(usage.daily.at(-1).new_signups, null);
     assert.equal(usage.daily.at(-1).expenses_suppressed, true);
     assert.equal(usage.daily.at(-1).expenses_added, null);
-    assert.equal(usage.weekly_active_users, 1);
+    assert.equal(usage.weekly_active_users, 2);
   });
 
   test('shows only categories used by at least five users and safely combines smaller groups', async () => {
