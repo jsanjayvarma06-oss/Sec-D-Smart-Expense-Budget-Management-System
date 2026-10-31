@@ -42,6 +42,7 @@ export function createApp({
     origin: config.corsOrigins,
     credentials: true,
   }));
+  app.use('/api/expenses/import', express.json({ limit: '2mb' }));
   app.use(express.json({ limit: '10kb' }));
   app.use(cookieParser());
 

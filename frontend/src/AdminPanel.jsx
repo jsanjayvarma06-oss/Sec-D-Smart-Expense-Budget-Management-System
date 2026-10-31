@@ -3,6 +3,7 @@ import AdminCategories from './AdminCategories.jsx';
 import AuditLog from './AuditLog.jsx';
 import SystemHealth from './SystemHealth.jsx';
 import UsageDashboard from './UsageDashboard.jsx';
+import UserManagement from './UserManagement.jsx';
 
 // Admin panel shell (story #109). Admins manage accounts and the system, never
 // personal finances: no section here shows anyone's expenses, income, budgets
@@ -19,6 +20,7 @@ const SECTIONS = [
 ];
 
 const BUILT = {
+  users: UserManagement,
   categories: AdminCategories,
   usage: UsageDashboard,
   system: SystemHealth,
@@ -104,7 +106,7 @@ export default function AdminPanel({ user, apiRequest, onBack }) {
               <h2 id="admin-section-title">{current.label}</h2>
               <p>{current.text}</p>
               {Section ? (
-                <Section apiRequest={apiRequest} />
+                <Section apiRequest={apiRequest} currentUser={user} />
               ) : (
                 <p className="muted">Being built in card #{current.card}.</p>
               )}

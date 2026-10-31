@@ -43,6 +43,7 @@ export async function findSession(token) {
      FROM users u
      WHERE s.token_hash = $1
        AND u.id = s.user_id
+       AND u.disabled_at IS NULL
        AND s.expires_at > now()
        AND s.last_seen_at > now() - make_interval(mins => $2)
      RETURNING u.id, u.name, u.email, u.role,

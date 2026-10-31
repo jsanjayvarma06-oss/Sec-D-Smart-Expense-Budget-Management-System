@@ -17,7 +17,8 @@
     "test:plan": "node --env-file-if-exists=.env.test --test --test-concurrency=1 test/plan/unit.test.js test/plan/integration.test.js test/plan/system.test.js test/plan/nfr04.test.js && node scripts/renderTestResults.js",
     "load:seed": "node scripts/load/seed.js",
     "load:run": "node scripts/load/run.js",
-    "admin:create": "node --env-file-if-exists=.env scripts/createAdmin.js"
+    "admin:create": "node --env-file-if-exists=.env scripts/createAdmin.js",
+    "demo:seed": "node --env-file-if-exists=.env scripts/seedDemo.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
