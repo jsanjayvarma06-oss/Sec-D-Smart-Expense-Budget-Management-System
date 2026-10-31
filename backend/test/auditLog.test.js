@@ -98,6 +98,7 @@ describe('Audit log table (#123)', () => {
 const ADMIN_ROUTE_CALLS = {
   'GET /overview': { action: 'view_overview', call: (cookie) => request(app).get('/api/admin/overview').set('Cookie', cookie) },
   'GET /health': { action: 'view_system_health', call: (cookie) => request(app).get('/api/admin/health').set('Cookie', cookie) },
+  'GET /usage': { action: 'view_usage_dashboard', call: (cookie) => request(app).get('/api/admin/usage').set('Cookie', cookie) },
   'GET /audit-log': { action: 'view_audit_log', call: (cookie) => request(app).get('/api/admin/audit-log').set('Cookie', cookie) },
   'GET /categories': { action: 'view_default_categories', call: (cookie) => request(app).get('/api/admin/categories').set('Cookie', cookie) },
   'POST /categories': {
