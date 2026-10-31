@@ -7,6 +7,7 @@ const ACTION_LABELS = {
   view_overview: 'Opened the admin panel',
   view_system_health: 'Checked system health',
   view_audit_log: 'Viewed the audit log',
+  view_usage_dashboard: 'Viewed the usage dashboard',
   view_default_categories: 'Viewed the built-in categories',
   create_default_category: 'Added a built-in category',
   rename_default_category: 'Renamed a built-in category',
