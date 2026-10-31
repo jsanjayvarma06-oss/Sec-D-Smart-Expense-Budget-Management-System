@@ -3,7 +3,7 @@ import { describe, test } from 'node:test';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { query } from '../src/db/pool.js';
-import { detectLayout, parseCSVLines } from '../src/services/statementImportService.js';
+import { detectLayout } from '../src/services/statementImportService.js';
 import { createUser, loginAs, useTestDatabase } from './helpers.js';
 
 useTestDatabase();

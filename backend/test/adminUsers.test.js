@@ -34,7 +34,7 @@ describe('Admin User Management (#113, #114, #115)', () => {
     const adminCookie = await loginAs(admin);
 
     const user1 = await createUser('findme_first@test.com', 'Alice In Wonderland');
-    const user2 = await createUser('findme_second@test.com', 'Bob The Builder');
+    await createUser('findme_second@test.com', 'Bob The Builder');
 
     const resAll = await request(app)
       .get('/api/admin/users?limit=10&page=1')

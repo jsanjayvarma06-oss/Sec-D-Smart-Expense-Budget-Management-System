@@ -5,7 +5,7 @@
 import { withUser } from '../db/userScope.js';
 import { HttpError } from '../utils/httpError.js';
 import { suggestCategoryName } from './merchantCategoryService.js';
-import { findCategoryByName, listCategories } from './categoryService.js';
+import { listCategories } from './categoryService.js';
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1 MB
 
