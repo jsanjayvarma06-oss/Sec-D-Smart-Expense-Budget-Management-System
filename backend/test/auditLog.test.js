@@ -97,6 +97,31 @@ describe('Audit log table (#123)', () => {
 // whoever adds it record an audit entry for it.
 const ADMIN_ROUTE_CALLS = {
   'GET /overview': { action: 'view_overview', call: (cookie) => request(app).get('/api/admin/overview').set('Cookie', cookie) },
+  'GET /users': { action: 'view_users', call: (cookie) => request(app).get('/api/admin/users').set('Cookie', cookie) },
+  'POST /users/:id/unlock': {
+    action: 'unlock_user',
+    call: async (cookie) => request(app)
+      .post(`/api/admin/users/${(await createUser('target_unlock@test.com')).id}/unlock`)
+      .set('Cookie', cookie),
+  },
+  'POST /users/:id/logout': {
+    action: 'logout_user_all',
+    call: async (cookie) => request(app)
+      .post(`/api/admin/users/${(await createUser('target_logout@test.com')).id}/logout`)
+      .set('Cookie', cookie),
+  },
+  'POST /users/:id/disable': {
+    action: 'disable_user',
+    call: async (cookie) => request(app)
+      .post(`/api/admin/users/${(await createUser('target_disable@test.com')).id}/disable`)
+      .set('Cookie', cookie),
+  },
+  'POST /users/:id/enable': {
+    action: 'enable_user',
+    call: async (cookie) => request(app)
+      .post(`/api/admin/users/${(await createUser('target_enable@test.com')).id}/enable`)
+      .set('Cookie', cookie),
+  },
   'GET /health': { action: 'view_system_health', call: (cookie) => request(app).get('/api/admin/health').set('Cookie', cookie) },
   'GET /usage': { action: 'view_usage_dashboard', call: (cookie) => request(app).get('/api/admin/usage').set('Cookie', cookie) },
   'GET /audit-log': { action: 'view_audit_log', call: (cookie) => request(app).get('/api/admin/audit-log').set('Cookie', cookie) },

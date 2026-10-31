@@ -15,6 +15,13 @@ import { getUsageDashboard } from '../services/adminUsageService.js';
 import { listAdminActions, recordAdminAction } from '../services/auditLogService.js';
 import { createCategorySchema, updateCategorySchema } from '../services/categorySchemas.js';
 import { getSystemHealth } from '../services/systemHealthService.js';
+import {
+  disableUser,
+  enableUser,
+  listUsers,
+  logoutUserEverywhere,
+  unlockUser,
+} from '../services/userManagementService.js';
 import { HttpError } from '../utils/httpError.js';
 
 // Filters for the audit log screen. Every one is optional.
@@ -40,6 +47,85 @@ export function adminRoutes() {
       const overview = await getAdminOverview();
       await recordAdminAction({ adminId: req.user.id, action: 'view_overview' });
       res.json({ overview });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // User management (#114): search and list users with pagination. Account fields only.
+  router.get('/users', async (req, res, next) => {
+    try {
+      const { search, page, limit } = req.query;
+      const data = await listUsers({ search, page, limit });
+      await recordAdminAction({
+        adminId: req.user.id,
+        action: 'view_users',
+        details: search ? { search } : {},
+      });
+      res.json(data);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Unlock a locked account (#115).
+  router.post('/users/:id/unlock', validateIdParam(), async (req, res, next) => {
+    try {
+      const user = await unlockUser(req.params.id);
+      if (!user) throw new HttpError(404, 'User not found');
+      await recordAdminAction({
+        adminId: req.user.id,
+        action: 'unlock_user',
+        targetUserId: user.id,
+      });
+      res.json({ message: 'User account unlocked', user });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Log out a user on all devices (#115).
+  router.post('/users/:id/logout', validateIdParam(), async (req, res, next) => {
+    try {
+      const result = await logoutUserEverywhere(req.params.id);
+      await recordAdminAction({
+        adminId: req.user.id,
+        action: 'logout_user_all',
+        targetUserId: req.params.id,
+      });
+      res.json({ message: 'User logged out everywhere', ...result });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Disable an account and revoke sessions immediately (#115).
+  router.post('/users/:id/disable', validateIdParam(), async (req, res, next) => {
+    try {
+      const user = await disableUser(req.user.id, req.params.id);
+      if (!user) throw new HttpError(404, 'User not found');
+      await recordAdminAction({
+        adminId: req.user.id,
+        action: 'disable_user',
+        targetUserId: user.id,
+      });
+      res.json({ message: 'User account disabled', user });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Re-enable an account (#115).
+  router.post('/users/:id/enable', validateIdParam(), async (req, res, next) => {
+    try {
+      const user = await enableUser(req.params.id);
+      if (!user) throw new HttpError(404, 'User not found');
+      await recordAdminAction({
+        adminId: req.user.id,
+        action: 'enable_user',
+        targetUserId: user.id,
+      });
+      res.json({ message: 'User account enabled', user });
     } catch (err) {
       next(err);
     }

@@ -4,6 +4,7 @@ import VoiceExpenseButton from './VoiceExpenseButton.jsx';
 import SubscriptionsCard from './SubscriptionsCard.jsx';
 import AdminPanel from './AdminPanel.jsx';
 import TwoFactorSetup from './TwoFactorSetup.jsx';
+import StatementImport from './StatementImport.jsx';
 import { parseSpokenExpense } from './voiceParser.js';
 
 const currentMonth = new Date().toISOString().slice(0, 7);
@@ -109,12 +110,16 @@ function AuthScreen({ onLogin, notice = '' }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState(notice);
 
   function switchMode(nextMode) {
     setMode(nextMode);
+    setTwoFactorRequired(false);
+    setTwoFactorCode('');
     setError('');
     setMessage('');
   }
@@ -142,10 +147,21 @@ function AuthScreen({ onLogin, notice = '' }) {
         setMode('login');
         setPassword('');
       } else {
-        await apiRequest('/api/auth/login', {
+        const payload = {
+          email,
+          password,
+          ...(twoFactorRequired && twoFactorCode ? { code: twoFactorCode.trim() } : {}),
+        };
+        const loginRes = await apiRequest('/api/auth/login', {
           method: 'POST',
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify(payload),
         });
+
+        if (loginRes?.two_factor_required) {
+          setTwoFactorRequired(true);
+          setMessage('Two-factor authentication is required. Enter the 6-digit code from your authenticator app or an 8-character backup code.');
+          return;
+        }
 
         await onLogin();
       }
@@ -162,36 +178,39 @@ function AuthScreen({ onLogin, notice = '' }) {
         <p className="eyebrow">PERSONAL FINANCE</p>
         <h1>Smart Expense &amp; Budget</h1>
         <p className="muted">
-          {mode === 'login' && 'Log in to manage your finances.'}
-          {mode === 'register' && 'Create an account to manage your budget.'}
-          {mode === 'forgot' && "Enter your email and we'll send you a link to reset your password."}
+          {twoFactorRequired && 'Enter your authenticator or backup code to finish signing in.'}
+          {!twoFactorRequired && mode === 'login' && 'Log in to manage your finances.'}
+          {!twoFactorRequired && mode === 'register' && 'Create an account to manage your budget.'}
+          {!twoFactorRequired && mode === 'forgot' && "Enter your email and we'll send you a link to reset your password."}
         </p>
 
-        <div className="auth-tabs">
-          <button
-            type="button"
-            className={mode === 'login' ? 'active' : ''}
-            onClick={() => {
-              setMode('login');
-              setError('');
-              setMessage('');
-            }}
-          >
-            Log in
-          </button>
+        {!twoFactorRequired && (
+          <div className="auth-tabs">
+            <button
+              type="button"
+              className={mode === 'login' ? 'active' : ''}
+              onClick={() => {
+                setMode('login');
+                setError('');
+                setMessage('');
+              }}
+            >
+              Log in
+            </button>
 
-          <button
-            type="button"
-            className={mode === 'register' ? 'active' : ''}
-            onClick={() => {
-              setMode('register');
-              setError('');
-              setMessage('');
-            }}
-          >
-            Register
-          </button>
-        </div>
+            <button
+              type="button"
+              className={mode === 'register' ? 'active' : ''}
+              onClick={() => {
+                setMode('register');
+                setError('');
+                setMessage('');
+              }}
+            >
+              Register
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="auth-form">
           {mode === 'register' && (
@@ -208,32 +227,50 @@ function AuthScreen({ onLogin, notice = '' }) {
             </label>
           )}
 
-          <label>
-            Email
-            <input
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              autoComplete="email"
-              required
-            />
-          </label>
-
-          {mode !== 'forgot' && (
+          {twoFactorRequired ? (
             <label>
-              Password
+              Authentication code or backup code
               <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete={
-                  mode === 'login' ? 'current-password' : 'new-password'
-                }
-                minLength={8}
-                maxLength={72}
+                type="text"
+                value={twoFactorCode}
+                onChange={(event) => setTwoFactorCode(event.target.value)}
+                placeholder="e.g. 123456 or a1b2c3d4"
+                autoComplete="one-time-code"
+                maxLength={10}
                 required
+                autoFocus
               />
             </label>
+          ) : (
+            <>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
+                  required
+                />
+              </label>
+
+              {mode !== 'forgot' && (
+                <label>
+                  Password
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete={
+                      mode === 'login' ? 'current-password' : 'new-password'
+                    }
+                    minLength={8}
+                    maxLength={72}
+                    required
+                  />
+                </label>
+              )}
+            </>
           )}
 
           {error && (
@@ -250,17 +287,33 @@ function AuthScreen({ onLogin, notice = '' }) {
 
           <button type="submit" disabled={busy}>
             {busy && 'Please wait…'}
-            {!busy && mode === 'login' && 'Log in'}
-            {!busy && mode === 'register' && 'Create account'}
-            {!busy && mode === 'forgot' && 'Send reset link'}
+            {!busy && twoFactorRequired && 'Verify & Log in'}
+            {!busy && !twoFactorRequired && mode === 'login' && 'Log in'}
+            {!busy && !twoFactorRequired && mode === 'register' && 'Create account'}
+            {!busy && !twoFactorRequired && mode === 'forgot' && 'Send reset link'}
           </button>
 
-          {mode === 'login' && (
+          {twoFactorRequired && (
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                setTwoFactorRequired(false);
+                setTwoFactorCode('');
+                setError('');
+                setMessage('');
+              }}
+            >
+              Back to password
+            </button>
+          )}
+
+          {!twoFactorRequired && mode === 'login' && (
             <button type="button" className="link-button" onClick={() => switchMode('forgot')}>
               Forgot your password?
             </button>
           )}
-          {mode === 'forgot' && (
+          {!twoFactorRequired && mode === 'forgot' && (
             <button type="button" className="link-button" onClick={() => switchMode('login')}>
               Back to log in
             </button>
@@ -365,6 +418,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [statementImportOpen, setStatementImportOpen] = useState(false);
   const [budgetAmount, setBudgetAmount] = useState('');
   const [budgetSaving, setBudgetSaving] = useState(false);
   const [budgetAlerts, setBudgetAlerts] = useState([]);
@@ -1980,7 +2034,16 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
               Showing all your recorded expenses. Selected month: {month}.
             </p>
           </div>
-          <strong>{monthExpenses.length} this month</strong>
+          <div className="expense-list-heading-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setStatementImportOpen(true)}
+            >
+              Import Bank Statement (CSV)
+            </button>
+            <strong>{monthExpenses.length} this month</strong>
+          </div>
         </div>
 
         {!loading && sortedExpenses.length === 0 && (
@@ -2063,6 +2126,18 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
           </div>
         )}
       </section>
+
+      {statementImportOpen && (
+        <StatementImport
+          apiRequest={apiRequest}
+          categories={categories}
+          onImportSuccess={(count) => {
+            setMessage(`Successfully imported ${count} expense${count === 1 ? '' : 's'} from statement.`);
+            refreshData();
+          }}
+          onClose={() => setStatementImportOpen(false)}
+        />
+      )}
 
       <TwoFactorSetup user={user} apiRequest={apiRequest} onEnabled={onUserChanged} />
 

@@ -39,6 +39,10 @@ export const twoFactorCodeSchema = z.object({
     .pipe(z.string().regex(/^\d{6}$/, 'Enter the 6-digit code from your app')),
 });
 
+export const twoFactorVerifySchema = z.object({
+  code: z.string().min(1, 'Code is required'),
+});
+
 export const loginSchema = z.object({
   email: z.string()
     .trim()
@@ -48,4 +52,6 @@ export const loginSchema = z.object({
 
   password: z.string()
     .min(1, 'Password is required'),
+
+  code: z.string().optional(),
 });

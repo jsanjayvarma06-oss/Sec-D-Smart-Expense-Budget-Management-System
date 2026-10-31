@@ -11,8 +11,12 @@ import {
   listExpenses,
   updateExpense,
   deleteExpense,
-dismissExpenseFlag,
+  dismissExpenseFlag,
 } from '../services/expenseService.js';
+import {
+  previewStatement,
+  importExpenses,
+} from '../services/statementImportService.js';
 import { HttpError } from '../utils/httpError.js';
 
 const expenseIdSchema = z.string().uuid();
@@ -54,6 +58,31 @@ export function expenseRoutes() {
       }
 
       res.status(201).json({ expense });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Preview statement CSV and detect duplicates & categories (#100, #101).
+  router.post('/import/preview', async (req, res, next) => {
+    try {
+      const csv = req.body?.csv ?? req.body?.content;
+      if (!csv || typeof csv !== 'string') {
+        throw new HttpError(400, 'CSV content is required', { code: 'INVALID_INPUT' });
+      }
+      const preview = await previewStatement(req.user.id, csv);
+      res.json(preview);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Atomic import of selected expense rows (#102).
+  router.post('/import', async (req, res, next) => {
+    try {
+      const items = req.body?.expenses || req.body?.items;
+      const result = await importExpenses(req.user.id, items);
+      res.status(201).json(result);
     } catch (err) {
       next(err);
     }

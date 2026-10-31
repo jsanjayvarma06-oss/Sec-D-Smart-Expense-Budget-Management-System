@@ -178,3 +178,161 @@ describe('Two-factor setup API (#104)', () => {
     assert.equal(res.body.code, 'VALIDATION');
   });
 });
+
+describe('Two-factor login & backup codes (#105, #106)', () => {
+  test('confirming setup returns 10 single-use backup codes (#105)', async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+
+    await request(app).post('/api/auth/two-factor/setup').set('Cookie', cookie).expect(200);
+    const code = totpAt(await pendingSecret(user.id), currentStep());
+
+    const res = await request(app).post('/api/auth/two-factor/confirm').set('Cookie', cookie)
+      .send({ code }).expect(200);
+
+    assert.equal(res.body.user.two_factor_enabled, true);
+    assert.ok(Array.isArray(res.body.backup_codes));
+    assert.equal(res.body.backup_codes.length, 10);
+    for (const bCode of res.body.backup_codes) {
+      assert.match(bCode, /^[0-9a-f]{4}-[0-9a-f]{4}$/);
+    }
+  });
+
+  test('login when 2FA is on requires code step, and wrong codes count toward lockout (#105)', async () => {
+    const password = 'StrongPassword123';
+    const user = await createUser('user2fa@test.com', 'User 2FA', password);
+    const cookie = await loginAs(user);
+
+    // Turn on 2FA
+    await request(app).post('/api/auth/two-factor/setup').set('Cookie', cookie).expect(200);
+    const secret = await pendingSecret(user.id);
+    const setupCode = totpAt(secret, currentStep());
+    await request(app).post('/api/auth/two-factor/confirm').set('Cookie', cookie)
+      .send({ code: setupCode }).expect(200);
+
+    // Logout
+    await request(app).post('/api/auth/logout').set('Cookie', cookie).expect(204);
+
+    // 1. Login with password only returns two_factor_required and NO session cookie
+    const step1 = await request(app)
+      .post('/api/auth/login')
+      .send({ email: user.email, password })
+      .expect(200);
+
+    assert.equal(step1.body.two_factor_required, true);
+    assert.equal(step1.headers['set-cookie'], undefined);
+
+    // 2. Login with wrong code fails
+    const wrongCodeRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: user.email, password, code: '000000' })
+      .expect(401);
+    assert.equal(wrongCodeRes.body.code, 'INVALID_TWO_FACTOR_CODE');
+
+    // 3. Login with correct TOTP code succeeds and sets session cookie
+    const validTotp = totpAt(secret, currentStep());
+    const successRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: user.email, password, code: validTotp })
+      .expect(200);
+
+    assert.equal(successRes.body.user.email, user.email);
+    assert.ok(successRes.headers['set-cookie']);
+  });
+
+  test('single-use backup codes allow login once and cannot be reused (#105)', async () => {
+    const password = 'StrongPassword123';
+    const user = await createUser('backup_code_user@test.com', 'Backup User', password);
+    const cookie = await loginAs(user);
+
+    // Turn on 2FA and get backup codes
+    await request(app).post('/api/auth/two-factor/setup').set('Cookie', cookie).expect(200);
+    const setupCode = totpAt(await pendingSecret(user.id), currentStep());
+    const confirmRes = await request(app).post('/api/auth/two-factor/confirm').set('Cookie', cookie)
+      .send({ code: setupCode }).expect(200);
+
+    const backupCode = confirmRes.body.backup_codes[0];
+
+    // Login using the backup code
+    const res1 = await request(app)
+      .post('/api/auth/login')
+      .send({ email: user.email, password, code: backupCode })
+      .expect(200);
+
+    assert.equal(res1.body.user.email, user.email);
+    assert.ok(res1.headers['set-cookie']);
+
+    // Attempting to reuse the same backup code fails
+    const res2 = await request(app)
+      .post('/api/auth/login')
+      .send({ email: user.email, password, code: backupCode })
+      .expect(401);
+
+    assert.equal(res2.body.code, 'INVALID_TWO_FACTOR_CODE');
+  });
+
+  test('disabling 2FA requires a current code and allows plain login afterwards (#106)', async () => {
+    const password = 'StrongPassword123';
+    const user = await createUser('disable_2fa_user@test.com', 'Disable 2FA User', password);
+    const cookie = await loginAs(user);
+
+    // Setup 2FA
+    await request(app).post('/api/auth/two-factor/setup').set('Cookie', cookie).expect(200);
+    const secret = await pendingSecret(user.id);
+    const setupCode = totpAt(secret, currentStep());
+    await request(app).post('/api/auth/two-factor/confirm').set('Cookie', cookie)
+      .send({ code: setupCode }).expect(200);
+
+    // Disable with wrong code fails
+    await request(app)
+      .post('/api/auth/two-factor/disable')
+      .set('Cookie', cookie)
+      .send({ code: '999999' })
+      .expect(400);
+
+    // Disable with current TOTP code succeeds
+    const currentCode = totpAt(secret, currentStep());
+    const disableRes = await request(app)
+      .post('/api/auth/two-factor/disable')
+      .set('Cookie', cookie)
+      .send({ code: currentCode })
+      .expect(200);
+
+    assert.equal(disableRes.body.user.two_factor_enabled, false);
+
+    // Next login works immediately without two-factor prompt
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: user.email, password })
+      .expect(200);
+
+    assert.equal(loginRes.body.two_factor_required, undefined);
+    assert.ok(loginRes.headers['set-cookie']);
+  });
+
+  test('regenerating backup codes requires a current code (#106)', async () => {
+    const user = await createUser('regen_codes@test.com');
+    const cookie = await loginAs(user);
+
+    // Setup 2FA
+    await request(app).post('/api/auth/two-factor/setup').set('Cookie', cookie).expect(200);
+    const secret = await pendingSecret(user.id);
+    const setupCode = totpAt(secret, currentStep());
+    const confirmRes = await request(app).post('/api/auth/two-factor/confirm').set('Cookie', cookie)
+      .send({ code: setupCode }).expect(200);
+
+    const oldCodes = confirmRes.body.backup_codes;
+
+    // Regenerate with valid code
+    const currentCode = totpAt(secret, currentStep());
+    const regenRes = await request(app)
+      .post('/api/auth/two-factor/backup-codes/regenerate')
+      .set('Cookie', cookie)
+      .send({ code: currentCode })
+      .expect(200);
+
+    assert.equal(regenRes.body.backup_codes.length, 10);
+    assert.notDeepEqual(regenRes.body.backup_codes, oldCodes);
+  });
+});
+
