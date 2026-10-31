@@ -38,7 +38,7 @@ export default function UsageDashboard({ apiRequest }) {
       <section className="summary-grid" aria-label="Weekly usage">
         <article className="summary-card">
           <p>Weekly active users</p>
-          <h2>{usage.weekly_active_users.toLocaleString('en-IN')}</h2>
+          <h2>{usage.weekly_active_users_suppressed ? 'Hidden (<5)' : usage.weekly_active_users.toLocaleString('en-IN')}</h2>
           <small>Active in the last 7 days</small>
         </article>
       </section>
