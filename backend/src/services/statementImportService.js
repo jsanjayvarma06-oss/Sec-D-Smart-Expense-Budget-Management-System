@@ -218,7 +218,15 @@ export async function previewStatement(userId, csvContent) {
         if (!exp.merchant && !exp.note) return true;
         const normExp = `${exp.merchant || ''} ${exp.note || ''}`.toLowerCase();
         const normDesc = description.toLowerCase();
-        return normExp.includes(normDesc.slice(0, 10)) || normDesc.includes(normExp.slice(0, 10)) || normExp.length === 0;
+        const normGuess = merchantGuess.toLowerCase();
+
+        if (exp.merchant && (normDesc.includes(exp.merchant) || exp.merchant.includes(normGuess))) return true;
+        if (exp.note && (normDesc.includes(exp.note) || exp.note.includes(normGuess))) return true;
+
+        const descTokens = normDesc.split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !['upi', 'pos', 'neft', 'rtgs', 'imps', 'card'].includes(w));
+        if (descTokens.some((token) => normExp.includes(token))) return true;
+
+        return normExp.trim().length === 0;
       });
 
       transactions.push({
