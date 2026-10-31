@@ -42,10 +42,9 @@ export async function getUsageDashboard() {
   );
 
   const { rows: activeRows } = await query(
-    `SELECT COUNT(DISTINCT user_id)::integer AS weekly_active_users
-     FROM sessions
-     WHERE last_seen_at >= now() - INTERVAL '7 days'
-       AND expires_at > now()`,
+    `SELECT COUNT(*)::integer AS weekly_active_users
+     FROM users
+     WHERE last_active_at >= now() - INTERVAL '7 days'`,
   );
 
   const { rows: categoryRows } = await query(
