@@ -100,7 +100,11 @@ export async function getUsageDashboard() {
 
   return {
     period_days: 30,
-    weekly_active_users: activeRows[0].weekly_active_users,
+    weekly_active_users: activeRows[0].weekly_active_users > 0 && activeRows[0].weekly_active_users < 5
+      ? null
+      : activeRows[0].weekly_active_users,
+    weekly_active_users_suppressed: activeRows[0].weekly_active_users > 0
+      && activeRows[0].weekly_active_users < 5,
     daily: dailyRows.map((row) => ({
       date: row.date,
       new_signups: row.signup_users > 0 && row.signup_users < 5 ? null : row.signup_events,
