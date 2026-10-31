@@ -63,7 +63,11 @@ export async function getUsageDashboard() {
      visible AS (
        SELECT category_name, expense_count, user_count
        FROM category_usage
-       WHERE category_name IS NOT NULL AND user_count >= 5
+       WHERE category_name IS NOT NULL
+         AND category_name <> 'Other'
+         AND user_count >= 5
+       ORDER BY expense_count DESC
+       LIMIT 5
      ),
      hidden AS (
        SELECT
@@ -75,9 +79,12 @@ export async function getUsageDashboard() {
          AND e.created_at < CURRENT_DATE + INTERVAL '1 day'
          AND (
            c.user_id IS NOT NULL
+           OR c.name = 'Other'
            OR c.name IN (
              SELECT category_name FROM category_usage
-             WHERE category_name IS NOT NULL AND user_count < 5
+             WHERE category_name IS NOT NULL
+               AND category_name <> 'Other'
+               AND user_count < 5
            )
          )
      )
