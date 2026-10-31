@@ -325,6 +325,56 @@ describe('6. Simulator & Reports (UC-08, UC-10)', () => {
     return `Simulation ran (simulated remaining ${money(sim.body.simulation.remaining_budget)}); the expense list still has 1 entry and the real remaining budget stayed ${money(after.remaining_amount)}.`;
   });
 
-  notImplemented('UT_32', 'Test exporting a report (FR20)', 'Report export is not built yet (#54 CSV, #55 PDF).');
-  notImplemented('UT_33', 'Test exporting a month with no data', 'Report export is not built yet (#54 CSV, #55 PDF).');
+
+  planTest('UT_32', 'Test exporting a report (FR20)', async () => {
+    const user = await newUser();
+    const month = thisMonth();
+
+    await addExpense(user, {
+      amount: 600,
+      category: 'Food',
+      merchant: 'CSV Test Shop',
+      note: 'Test CSV export',
+    });
+
+    const res = await api(user)
+      .get(`/api/reports/export?month=${month}&format=csv`)
+      .expect(200);
+
+    assert.match(res.headers['content-type'], /text\/csv/);
+    assert.match(
+      res.headers['content-disposition'],
+      new RegExp(`expense-report-${month}\\.csv`),
+    );
+
+    const csv = res.text.replace(/^\uFEFF/, '');
+
+    assert.match(csv, /Date,|\"Date\"/);
+    assert.match(csv, /CSV Test Shop/);
+    assert.match(csv, /Food/);
+    assert.match(csv, /Test CSV export/);
+    assert.match(csv, /600\.00/);
+
+    return `CSV report downloaded successfully for ${month}, containing the test expense of ${money(600)} with its merchant, category and note.`;
+  });
+
+  planTest('UT_33', 'Test exporting a month with no data', async () => {
+    const user = await newUser();
+
+    const res = await api(user)
+      .get('/api/reports/export?month=2020-01&format=csv')
+      .expect(200);
+
+    assert.match(res.headers['content-type'], /text\/csv/);
+
+    const csv = res.text.replace(/^\uFEFF/, '').trim();
+
+    assert.equal(
+      csv,
+      '"Date","Merchant","Category","Note","Amount"',
+    );
+
+    return 'An empty-month CSV was returned successfully with column headings and no expense rows.';
+  });
+
 });

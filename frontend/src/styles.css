@@ -1176,3 +1176,84 @@ h3 {
   align-items: center;
   gap: 8px;
 }
+/* =========================================
+   Issue #34: Expense History Filters
+========================================= */
+
+.expense-history-filters {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 2fr)
+    repeat(3, minmax(140px, 1fr))
+    auto;
+  align-items: end;
+  gap: 12px;
+  margin: 18px 0 20px;
+}
+
+.expense-history-filters label {
+  min-width: 0;
+  color: #344054;
+  font-size: 13px;
+}
+
+.expense-history-filters input,
+.expense-history-filters select {
+  min-height: 42px;
+}
+
+.expense-clear-filters {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+/* Pagination */
+
+.expense-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.expense-pagination-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.expense-pagination-actions span {
+  color: #475467;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Responsive layout */
+
+@media (max-width: 900px) {
+  .expense-history-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .expense-clear-filters {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 520px) {
+  .expense-history-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .expense-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .expense-pagination-actions {
+    justify-content: space-between;
+  }
+}

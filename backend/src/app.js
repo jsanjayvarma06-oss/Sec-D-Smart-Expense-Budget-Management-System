@@ -23,6 +23,7 @@ import { categoryRoutes } from './routes/categoryRoutes.js';
 import { notificationRoutes } from './routes/notificationRoutes.js';
 import { budgetRoutes } from './routes/budgetRoutes.js';
 import { analyticsRoutes } from './routes/analyticsRoutes.js';
+import { reportRoutes } from './routes/reportRoutes.js';
 import { insightRoutes } from './routes/insightRoutes.js';
 import { adminRoutes } from './routes/adminRoutes.js';
 import { requireAdmin } from './middleware/requireAdmin.js';
@@ -99,6 +100,7 @@ app.use('/api/income', incomeRoutes());
   app.use('/api/budgets', budgetRoutes());
 app.use('/api/what-if', whatIfRoutes());
   app.use('/api/analytics', analyticsRoutes());
+  app.use('/api/reports', reportRoutes());
   app.use('/api/notifications', notificationRoutes());
   app.use('/api/insights', insightRoutes());
   // Admin panel: everything under /api/admin, including paths that don't exist,

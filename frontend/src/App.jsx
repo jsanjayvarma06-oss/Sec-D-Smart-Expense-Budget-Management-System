@@ -356,6 +356,18 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
   const [budgets, setBudgets] = useState([]);
   const [categories, setCategories] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  // Issue #34: Expense history search, filters and pagination
+const [expenseHistory, setExpenseHistory] = useState([]);
+const [expensePagination, setExpensePagination] = useState(null);
+
+const [expenseSearch, setExpenseSearch] = useState('');
+const [expenseCategoryFilter, setExpenseCategoryFilter] = useState('');
+const [expenseStartDate, setExpenseStartDate] = useState('');
+const [expenseEndDate, setExpenseEndDate] = useState('');
+
+const [expensePage, setExpensePage] = useState(1);
+const [expenseHistoryLoading, setExpenseHistoryLoading] = useState(false);
+const [expenseHistoryError, setExpenseHistoryError] = useState('');
   const [expenseForm, setExpenseForm] = useState(emptyExpense);
   const [suggestedCategoryId, setSuggestedCategoryId] = useState('');
   const [voiceNote, setVoiceNote] = useState({ kind: '', text: '' });
@@ -393,6 +405,37 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
   const refreshData = useCallback(() => {
     setRefreshVersion((version) => version + 1);
   }, []);
+
+async function handleExportCsv() {
+    try {
+      const response = await fetch(
+        `/api/reports/export?month=${encodeURIComponent(month)}&format=csv`,
+        {
+          credentials: 'include',
+        },
+      );
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || 'Could not export CSV report.');
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `expense-report-${month}.csv`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message || 'Could not export CSV report.');
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -476,6 +519,81 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
       active = false;
     };
   }, [month, refreshVersion]);
+  // Issue #34: Load the current page of expense history.
+useEffect(() => {
+  let active = true;
+
+  async function loadExpenseHistory() {
+    setExpenseHistoryLoading(true);
+    setExpenseHistoryError('');
+
+    const params = new URLSearchParams({
+      page: String(expensePage),
+      limit: '10',
+    });
+
+    if (expenseSearch.trim()) {
+      params.set('search', expenseSearch.trim());
+    }
+
+    if (expenseCategoryFilter) {
+      params.set('category_id', expenseCategoryFilter);
+    }
+
+    if (expenseStartDate) {
+      params.set('start_date', expenseStartDate);
+    }
+
+    if (expenseEndDate) {
+      params.set('end_date', expenseEndDate);
+    }
+
+    try {
+      const result = await apiRequest(
+        `/api/expenses?${params.toString()}`
+      );
+
+      if (!active) return;
+
+      setExpenseHistory(result.expenses || []);
+      setExpensePagination(result.pagination || null);
+
+      // Handle cases where deleting an expense reduces the total pages.
+      const totalPages = result.pagination?.totalPages ?? 0;
+
+      if (totalPages > 0 && expensePage > totalPages) {
+        setExpensePage(totalPages);
+      } else if (totalPages === 0 && expensePage !== 1) {
+        setExpensePage(1);
+      }
+    } catch (err) {
+      if (active) {
+        setExpenseHistoryError(
+          err.message || 'Could not load expense history.'
+        );
+        setExpenseHistory([]);
+        setExpensePagination(null);
+      }
+    } finally {
+      if (active) {
+        setExpenseHistoryLoading(false);
+      }
+    }
+  }
+
+  loadExpenseHistory();
+
+  return () => {
+    active = false;
+  };
+}, [
+  expensePage,
+  expenseSearch,
+  expenseCategoryFilter,
+  expenseStartDate,
+  expenseEndDate,
+  refreshVersion,
+]);
 
   const overallBudget = budgets.find(
     (budget) => budget.category_id === null,
@@ -1290,7 +1408,7 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
           <BudgetPace budget={overallBudget} />
         </article>
       </section>
-      
+
 <SpendingCharts
   expenses={monthExpenses}
   allExpenses={expenses}
@@ -1656,100 +1774,281 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
           </div>
         </form>
       </section>
-
-      <section className="expense-section">
-        <div className="expense-list-heading">
-          <div>
-            <h2>Expense history</h2>
-            <p className="muted">
-              Showing all your recorded expenses. Selected month: {month}.
-            </p>
-          </div>
-          <strong>{monthExpenses.length} this month</strong>
-        </div>
-
-        {!loading && sortedExpenses.length === 0 && (
-          <div className="empty-state">
-            <h3>No expenses yet</h3>
-            <p>Add your first expense using the form above.</p>
-          </div>
-        )}
-
-        {sortedExpenses.length > 0 && (
-          <div className="expense-table-wrapper">
-            <table className="expense-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Expense</th>
-                  <th>Category</th>
-                  <th>Amount</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedExpenses.map((expense) => (
-  <tr key={expense.id}>
-    <td>{String(expense.spent_on).slice(0, 10)}</td>
-    <td>
-      <strong>{expense.merchant || 'Expense'}</strong>
-      {expense.note && (
-        <p className="muted expense-note">{expense.note}</p>
-      )}
-      {expense.is_flagged && (
-        <p className="expense-warning">
-          ⚠ Unusual spending detected. Edit it if the amount is wrong, or mark
-          it as reviewed if it is correct.
-        </p>
-      )}
-    </td>
-    <td>
-      {expense.category_name ||
-        categories.find(
-          (category) => category.id === expense.category_id,
-        )?.name ||
-        'Category'}
-    </td>
-    <td className="expense-amount">
-      {formatCurrency(expense.amount)}
-    </td>
-    <td>
-      <div className="table-actions">
-        {expense.is_flagged && (
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => handleReviewExpense(expense)}
-          >
-            Mark as reviewed
-          </button>
-        )}
+    <section className="expense-section">
+  <div className="expense-list-heading">
+    <div>
+      <div className="expense-history-title-row">
+        <h2>Expense history</h2>
         <button
           type="button"
           className="secondary-button"
-          onClick={() => startEditing(expense)}
+          onClick={handleExportCsv}
         >
-          Edit
-        </button>
-        <button
-          type="button"
-          className="danger-button"
-          onClick={() => handleDelete(expense)}
-        >
-          Delete
+          Export CSV
         </button>
       </div>
-    </td>
-  </tr>
-))}
+      <p className="muted">
+        Search and filter your expenses. Showing 10 records per page.
+      </p>
+    </div>
 
-              </tbody>
-            </table>
+    <strong>{monthExpenses.length} this month</strong>
+  </div>
+
+  {/* Search and filters */}
+  <div className="expense-history-filters">
+    <label>
+      Search expenses
+      <input
+        type="search"
+        value={expenseSearch}
+        onChange={(event) => {
+          setExpenseSearch(event.target.value);
+          setExpensePage(1);
+        }}
+        placeholder="Search merchant, note, or category"
+        maxLength={100}
+      />
+    </label>
+
+    <label>
+      Category
+      <select
+        value={expenseCategoryFilter}
+        onChange={(event) => {
+          setExpenseCategoryFilter(event.target.value);
+          setExpensePage(1);
+        }}
+      >
+        <option value="">All categories</option>
+
+        {categories.map((category) => (
+          <option key={category.id} value={category.id}>
+            {category.name}
+          </option>
+        ))}
+      </select>
+    </label>
+
+    <label>
+      From date
+      <input
+        type="date"
+        value={expenseStartDate}
+        max={expenseEndDate || undefined}
+        onChange={(event) => {
+          setExpenseStartDate(event.target.value);
+          setExpensePage(1);
+        }}
+      />
+    </label>
+
+    <label>
+      To date
+      <input
+        type="date"
+        value={expenseEndDate}
+        min={expenseStartDate || undefined}
+        onChange={(event) => {
+          setExpenseEndDate(event.target.value);
+          setExpensePage(1);
+        }}
+      />
+    </label>
+
+    <button
+      type="button"
+      className="secondary-button expense-clear-filters"
+      onClick={() => {
+        setExpenseSearch('');
+        setExpenseCategoryFilter('');
+        setExpenseStartDate('');
+        setExpenseEndDate('');
+        setExpensePage(1);
+      }}
+    >
+      Clear filters
+    </button>
+  </div>
+
+  {/* Error message */}
+  {expenseHistoryError && (
+    <p className="error-message" role="alert">
+      {expenseHistoryError}
+    </p>
+  )}
+
+  {/* Loading message */}
+  {expenseHistoryLoading && (
+    <p className="muted" role="status">
+      Loading expenses…
+    </p>
+  )}
+
+  {/* Empty state */}
+  {!expenseHistoryLoading &&
+    !expenseHistoryError &&
+    expenseHistory.length === 0 && (
+      <div className="empty-state">
+        <h3>No matching expenses</h3>
+
+        <p>
+          {expenseSearch ||
+          expenseCategoryFilter ||
+          expenseStartDate ||
+          expenseEndDate
+            ? 'Try changing or clearing your search and filters.'
+            : 'Add your first expense using the form above.'}
+        </p>
+      </div>
+    )}
+
+  {/* Expense table */}
+  {expenseHistory.length > 0 && (
+    <>
+      <div className="expense-table-wrapper">
+        <table className="expense-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Expense</th>
+              <th>Category</th>
+              <th>Amount</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {expenseHistory.map((expense) => (
+              <tr key={expense.id}>
+                <td>
+                  {String(expense.spent_on).slice(0, 10)}
+                </td>
+
+                <td>
+                  <strong>
+                    {expense.merchant || 'Expense'}
+                  </strong>
+
+                  {expense.note && (
+                    <p className="muted expense-note">
+                      {expense.note}
+                    </p>
+                  )}
+
+                  {expense.is_flagged && (
+                    <p className="expense-warning">
+                      ⚠ Unusual spending detected. Edit it if the
+                      amount is wrong, or mark it as reviewed if it
+                      is correct.
+                    </p>
+                  )}
+                </td>
+
+                <td>
+                  {expense.category_name ||
+                    categories.find(
+                      (category) =>
+                        category.id === expense.category_id
+                    )?.name ||
+                    'Category'}
+                </td>
+
+                <td className="expense-amount">
+                  {formatCurrency(expense.amount)}
+                </td>
+
+                <td>
+                  <div className="table-actions">
+                    {expense.is_flagged && (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() =>
+                          handleReviewExpense(expense)
+                        }
+                      >
+                        Mark as reviewed
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => startEditing(expense)}
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      type="button"
+                      className="danger-button"
+                      onClick={() => handleDelete(expense)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {expensePagination && (
+        <div className="expense-pagination">
+          <span className="muted">
+            {`Showing ${
+              (expensePagination.page - 1) *
+                expensePagination.limit +
+              1
+            }–${Math.min(
+              expensePagination.page *
+                expensePagination.limit,
+              expensePagination.total
+            )} of ${expensePagination.total} expenses`}
+          </span>
+
+          <div className="expense-pagination-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() =>
+                setExpensePage((page) => Math.max(1, page - 1))
+              }
+              disabled={
+                expenseHistoryLoading ||
+                expensePagination.page <= 1
+              }
+            >
+              Previous
+            </button>
+
+            <span>
+              Page {expensePagination.page} of{' '}
+              {Math.max(1, expensePagination.totalPages)}
+            </span>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setExpensePage((page) => page + 1)}
+              disabled={
+                expenseHistoryLoading ||
+                expensePagination.page >=
+                  expensePagination.totalPages
+              }
+            >
+              Next
+            </button>
           </div>
-        )}
-      </section>
-
-      <TwoFactorSetup user={user} apiRequest={apiRequest} onEnabled={onUserChanged} />
+        </div>
+      )}
+    </>
+  )}
+</section>
+<TwoFactorSetup user={user} apiRequest={apiRequest} onEnabled={onUserChanged} />
 
       <footer className="dashboard-footer">
         <p className="muted">Signed in as {user.email}.</p>

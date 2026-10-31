@@ -11,11 +11,31 @@ import {
   listExpenses,
   updateExpense,
   deleteExpense,
-dismissExpenseFlag,
+  dismissExpenseFlag,
 } from '../services/expenseService.js';
 import { HttpError } from '../utils/httpError.js';
 
 const expenseIdSchema = z.string().uuid();
+
+const expenseListQuerySchema = z.object({
+  search: z.string().trim().max(100).optional(),
+  category_id: z.string().uuid().optional(),
+  start_date: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  end_date: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+}).strict().refine(
+  (value) => !value.start_date
+    || !value.end_date
+    || value.start_date <= value.end_date,
+  {
+    message: 'Start date must be before or equal to end date',
+  },
+);
 
 function validateExpenseId(id) {
   const result = expenseIdSchema.safeParse(id);
@@ -35,8 +55,25 @@ export function expenseRoutes() {
   // List expenses belonging to the logged-in user.
   router.get('/', async (req, res, next) => {
     try {
-      const expenses = await listExpenses(req.user.id);
-      res.json({ expenses });
+      const parsed = expenseListQuerySchema.safeParse(req.query);
+
+      if (!parsed.success) {
+        throw new HttpError(400, 'Invalid expense search or filter parameters', {
+          code: 'VALIDATION',
+        });
+      }
+
+      const hasListOptions = Object.keys(req.query).length > 0;
+
+      const result = await listExpenses(req.user.id, {
+        ...parsed.data,
+        paginate: hasListOptions,
+      });
+
+      res.json({
+        expenses: result.expenses,
+        pagination: result.pagination,
+      });
     } catch (err) {
       next(err);
     }
@@ -106,7 +143,6 @@ export function expenseRoutes() {
       next(err);
     }
   });
-
 
   return router;
 }
