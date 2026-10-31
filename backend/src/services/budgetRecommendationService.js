@@ -33,7 +33,9 @@ export async function recommendBudgets(userId) {
       [userId],
     );
 
-    const totalIncome = Number(incomeRows[0].total_income);
+    // The query covers three complete months. Convert the sum to an average
+    // monthly income before applying the budget cap (FR13 / #45).
+    const totalIncome = Math.round((Number(incomeRows[0].total_income) / MINIMUM_MONTHS) * 100) / 100;
     const categories = spendingRows.map((row) => ({
       category_id: row.category_id,
       category_name: row.category_name,
@@ -77,27 +79,25 @@ export async function recommendBudgets(userId) {
       ? budgetLimit / totalAverage
       : 1;
 
-    let allocated = 0;
-    const recommendations = categories.map((item, index) => {
-      let recommendedAmount = Math.round(
-        item.average_monthly_spending * scale * 100,
-      ) / 100;
-
-      // Avoid exceeding the overall limit because of rounding.
-      if (index === categories.length - 1) {
-        recommendedAmount = Math.max(
-          0,
-          Math.round((budgetLimit - allocated) * 100) / 100,
-        );
-      }
-
-      allocated = Math.round((allocated + recommendedAmount) * 100) / 100;
+    // Work in integer paise so rounding cannot push the total over the cap.
+    // Do not fill unused income by padding the final category: each suggestion
+    // must remain proportional to that category's observed average spending.
+    const budgetLimitPaise = Math.round(budgetLimit * 100);
+    let remainingPaise = budgetLimitPaise;
+    const recommendations = categories.map((item) => {
+      const averagePaise = Math.round(item.average_monthly_spending * 100);
+      const recommendedPaise = Math.min(
+        Math.round(averagePaise * scale),
+        remainingPaise,
+      );
+      remainingPaise -= recommendedPaise;
 
       return {
         ...item,
-        recommended_monthly_budget: recommendedAmount,
+        recommended_monthly_budget: recommendedPaise / 100,
       };
     });
+    const allocated = (budgetLimitPaise - remainingPaise) / 100;
 
     return {
       available: true,
