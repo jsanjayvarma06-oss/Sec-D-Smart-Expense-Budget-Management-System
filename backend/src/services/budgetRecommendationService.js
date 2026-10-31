@@ -15,6 +15,18 @@ export async function recommendBudgets(userId) {
       [userId],
     );
 
+    // Count distinct months across the user's whole history window. Counting
+    // the maximum months for any one category would wrongly reject users who
+    // used different categories in each of the three months.
+    const { rows: historyRows } = await db.query(
+      `SELECT COUNT(DISTINCT date_trunc('month', spent_on))::integer AS history_months
+       FROM expenses
+       WHERE user_id = $1
+         AND spent_on >= date_trunc('month', CURRENT_DATE) - INTERVAL '3 months'
+         AND spent_on < date_trunc('month', CURRENT_DATE)`,
+      [userId],
+    );
+
     // Get spending by category for the same period.
     const { rows: spendingRows } = await db.query(
       `SELECT
@@ -44,9 +56,7 @@ export async function recommendBudgets(userId) {
         Math.round((Number(row.total_spent) / MINIMUM_MONTHS) * 100) / 100,
     }));
 
-    const historyMonths = categories.length > 0
-      ? Math.max(...categories.map((item) => item.months_with_spending))
-      : 0;
+    const historyMonths = historyRows[0].history_months;
 
     if (historyMonths < MINIMUM_MONTHS) {
       return {
