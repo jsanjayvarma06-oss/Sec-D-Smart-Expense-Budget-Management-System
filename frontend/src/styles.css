@@ -1164,6 +1164,7 @@ h3 {
     flex-direction: column;
   }
 }
+
 .category-hint {
   display: block;
   margin-top: 4px;
@@ -1175,4 +1176,62 @@ h3 {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+/* Savings Goals */
+
+.savings-goals-section {
+  margin-bottom: 24px;
+}
+
+.savings-goal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.savings-goal-card h3 {
+  margin-bottom: 4px;
+}
+
+.savings-goal-progress-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 0.9rem;
+}
+
+.savings-goal-progress-track {
+  width: 100%;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #e5e7eb;
+}
+
+.savings-goal-progress-fill {
+  height: 100%;
+  border-radius: 20px;
+  background: #4776e6;
+  transition: width 0.3s ease;
+}
+
+.savings-goal-form-actions,
+.savings-goal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.savings-goal-actions {
+  margin-top: 8px;
+}
+
+@media (max-width: 520px) {
+  .savings-goal-form-actions,
+  .savings-goal-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

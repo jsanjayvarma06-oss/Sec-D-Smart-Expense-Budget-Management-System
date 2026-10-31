@@ -1,5 +1,6 @@
-// Unit test cases UT_01–UT_33 from Documents/04_Test_Plan.pdf (card #56),
-// run through the real API. See planHelpers.js for how outcomes are recorded.
+// Unit test cases UT_01–UT_36 from Documents/04_Test_Plan.pdf (card #56),
+// plus savings-goal CRUD and user-isolation coverage, run through the real API.
+// See planHelpers.js for how outcomes are recorded.
 
 import assert from 'node:assert/strict';
 import { describe } from 'node:test';
@@ -259,9 +260,173 @@ describe('4. Analytics, Prediction & Anomaly Detection (UC-05)', () => {
 });
 
 describe('5. Savings Goals & Recurring Expenses (UC-06, UC-07)', () => {
-  notImplemented('UT_24', 'Test creating a savings goal (FR14)', 'Savings goals are not built yet (#50).');
-  notImplemented('UT_25', 'Test the time-to-goal estimate (FR15)', 'Time-to-goal estimate is not built yet (#51).');
-  notImplemented('UT_26', 'Test the estimate when nothing is being saved', 'Time-to-goal estimate is not built yet (#51).');
+  planTest('UT_24', 'Test creating a savings goal (FR14)', async () => {
+    const user = await newUser();
+
+    const created = await api(user).post('/api/savings-goals', {
+      name: 'Emergency Fund',
+      target_amount: 10000,
+      saved_amount: 2500,
+      target_date: null,
+    }).expect(201);
+
+    const goal = created.body.savingsGoal;
+
+    assert.equal(goal.name, 'Emergency Fund');
+    assert.equal(Number(goal.target_amount), 10000);
+    assert.equal(Number(goal.saved_amount), 2500);
+    assert.equal(goal.status, 'active');
+    assert.equal(goal.progress, 25);
+    assert.equal(goal.remaining_amount, 7500);
+
+    const list = (await api(user).get('/api/savings-goals').expect(200)).body.savingsGoals;
+
+    assert.equal(list.length, 1);
+    assert.equal(list[0].id, goal.id);
+
+    return `Created "${goal.name}" with target ${money(10000)} and saved amount ${money(2500)}. Progress is ${goal.progress}% and remaining amount is ${money(goal.remaining_amount)}. The goal also appears in the savings-goals list.`;
+  });
+
+  planTest('UT_25', 'Test the time-to-goal estimate (FR15)', async () => {
+    const user = await newUser();
+
+    // Add income in each of the previous three completed months.
+    for (const monthsAgo of [3, 2, 1]) {
+      await api(user).post('/api/income', {
+        amount: 6000,
+        source: 'Monthly income',
+        received_on: dayInMonth(monthsAgo),
+      }).expect(201);
+    }
+
+    const created = await api(user).post('/api/savings-goals', {
+      name: 'Laptop Fund',
+      target_amount: 20000,
+      saved_amount: 5000,
+      target_date: null,
+    }).expect(201);
+
+    const goal = created.body.savingsGoal;
+
+    assert.equal(goal.remaining_amount, 15000);
+    assert.equal(goal.average_monthly_savings, 6000);
+    assert.equal(goal.estimated_months, 3);
+    assert.equal(goal.estimate_message, 'Approximately 3 month(s) remaining.');
+
+    return `Average monthly savings is ${money(6000)}. With ${money(15000)} remaining, the estimated completion time is ${goal.estimated_months} months.`;
+  });
+
+  planTest('UT_26', 'Test the estimate when nothing is being saved', async () => {
+    const user = await newUser();
+
+    const created = await api(user).post('/api/savings-goals', {
+      name: 'Travel Fund',
+      target_amount: 10000,
+      saved_amount: 2000,
+      target_date: null,
+    }).expect(201);
+
+    const goal = created.body.savingsGoal;
+
+    assert.equal(goal.remaining_amount, 8000);
+    assert.equal(goal.average_monthly_savings, 0);
+    assert.equal(goal.estimated_months, null);
+    assert.equal(
+      goal.estimate_message,
+      'Not enough savings data to estimate completion.',
+    );
+
+    return `The goal has ${money(8000)} remaining, but there is no positive savings history. The system correctly displays "${goal.estimate_message}" instead of inventing a completion date.`;
+  });
+
+  // Additional coverage for the Savings Goals CRUD operations in issue #50.
+  planTest('UT_34', 'Test updating an existing savings goal', async () => {
+    const user = await newUser();
+
+    const created = await api(user).post('/api/savings-goals', {
+      name: 'Emergency Fund',
+      target_amount: 10000,
+      saved_amount: 2000,
+      target_date: null,
+    }).expect(201);
+
+    const goalId = created.body.savingsGoal.id;
+
+    const updated = await api(user).put(`/api/savings-goals/${goalId}`, {
+      name: 'Updated Emergency Fund',
+      target_amount: 10000,
+      saved_amount: 5000,
+      target_date: null,
+      status: 'active',
+    }).expect(200);
+
+    const goal = updated.body.savingsGoal;
+
+    assert.equal(goal.name, 'Updated Emergency Fund');
+    assert.equal(Number(goal.target_amount), 10000);
+    assert.equal(Number(goal.saved_amount), 5000);
+    assert.equal(goal.progress, 50);
+    assert.equal(goal.remaining_amount, 5000);
+    assert.equal(goal.status, 'active');
+
+    return `Updated the goal name and saved amount. New progress is ${goal.progress}% with ${money(goal.remaining_amount)} remaining.`;
+  });
+
+  planTest('UT_35', 'Test deleting an existing savings goal', async () => {
+    const user = await newUser();
+
+    const created = await api(user).post('/api/savings-goals', {
+      name: 'Vacation Fund',
+      target_amount: 20000,
+      saved_amount: 5000,
+      target_date: null,
+    }).expect(201);
+
+    const goalId = created.body.savingsGoal.id;
+
+    await api(user).delete(`/api/savings-goals/${goalId}`).expect(204);
+
+    const list = (await api(user).get('/api/savings-goals')
+      .expect(200)).body.savingsGoals;
+
+    assert.equal(list.length, 0);
+
+    return 'Savings goal deleted successfully and no longer appears in the goal list.';
+  });
+
+  planTest('UT_36', 'Test that users cannot modify another user savings goal', async () => {
+    const owner = await newUser();
+    const anotherUser = await newUser();
+
+    const created = await api(owner).post('/api/savings-goals', {
+      name: 'Private Savings',
+      target_amount: 15000,
+      saved_amount: 3000,
+      target_date: null,
+    }).expect(201);
+
+    const goalId = created.body.savingsGoal.id;
+
+    await api(anotherUser).put(`/api/savings-goals/${goalId}`, {
+      name: 'Unauthorized Update',
+      target_amount: 15000,
+      saved_amount: 10000,
+      target_date: null,
+      status: 'active',
+    }).expect(404);
+
+    await api(anotherUser).delete(`/api/savings-goals/${goalId}`)
+      .expect(404);
+
+    const ownerGoals = (await api(owner).get('/api/savings-goals')
+      .expect(200)).body.savingsGoals;
+
+    assert.equal(ownerGoals.length, 1);
+    assert.equal(ownerGoals[0].id, goalId);
+    assert.equal(ownerGoals[0].name, 'Private Savings');
+
+    return 'Another user could neither update nor delete the goal. The original owner still has access to it.';
+  });
 
   planTest('UT_27', 'Test creating a recurring expense (FR16)', async () => {
     const user = await newUser();

@@ -30,14 +30,30 @@ const toPaise = (amount) => {
 };
 const fromPaise = (paise) => paise / 100;
 
+
 function loadTransactions() {
-  const [header, ...lines] = fs.readFileSync(fixture, 'utf8').trim().split('\n');
-  const cols = header.split(',');
+  const content = fs.readFileSync(fixture, 'utf8').trim();
+
+  const [header, ...lines] = content
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0);
+
+  const cols = header.split(',').map((column) => column.trim());
+
   return lines.map((line) => {
-    const row = Object.fromEntries(line.split(',').map((v, i) => [cols[i], v]));
-    return { ...row, date: dayInMonth(Number(row.months_ago), Number(row.day)), paise: toPaise(row.amount) };
+    const values = line.split(',').map((value) => value.trim());
+    const row = Object.fromEntries(
+      values.map((value, index) => [cols[index], value])
+    );
+
+    return {
+      ...row,
+      date: dayInMonth(Number(row.months_ago), Number(row.day)),
+      paise: toPaise(row.amount),
+    };
   });
 }
+
 
 // The "manual calculation": plain integer sums, no app code involved.
 function expectedTotals(transactions) {
@@ -61,7 +77,17 @@ describe('NFR04 calculations against 100 transactions', () => {
 
     for (const t of transactions) {
       if (t.type === 'income') {
-        await api(user).post('/api/income', { amount: t.amount, source: t.category, received_on: t.date }).expect(201);
+        const response = await api(user).post('/api/income', {
+          amount: t.amount,
+          source: t.category,
+          received_on: t.date,
+        });
+        
+        if (response.status !== 201) {
+          throw new Error(
+            `Income record rejected: ${JSON.stringify(t)}. API response: ${JSON.stringify(response.body)}`
+          );
+        } 
       } else {
         await addExpense(user, { amount: t.amount, category: t.category, spent_on: t.date });
       }

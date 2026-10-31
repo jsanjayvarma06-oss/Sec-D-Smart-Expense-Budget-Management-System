@@ -18,6 +18,7 @@ import {
 import { authRoutes } from './routes/authRoutes.js';
 import { forecastRoutes } from './routes/forecastRoutes.js';
 import { incomeRoutes } from './routes/incomeRoutes.js';
+import { savingsGoalRoutes } from './routes/savingsGoalRoutes.js';
 import { expenseRoutes } from './routes/expenseRoutes.js';
 import { categoryRoutes } from './routes/categoryRoutes.js';
 import { notificationRoutes } from './routes/notificationRoutes.js';
@@ -94,6 +95,7 @@ app.use('/api/forecast', forecastRoutes());
 app.use('/api/financial-health', financialHealthRoutes());
 app.use('/api/auth', authRoutes());
 app.use('/api/income', incomeRoutes());
+app.use('/api/savings-goals', savingsGoalRoutes());
   app.use('/api/expenses', expenseRoutes());
   app.use('/api/categories', categoryRoutes());
   app.use('/api/budgets', budgetRoutes());
