@@ -45,7 +45,8 @@ describe('GET /api/admin/usage (#125, #126)', () => {
   test('returns 30 days of aggregate counts and suppresses daily groups under five users', async () => {
     const { cookie } = await createAdmin();
     const user = await createUser('single-activity@test.com');
-    await loginAs(user);
+    const userCookie = await loginAs(user);
+    await request(app).get('/api/auth/me').set('Cookie', userCookie).expect(200);
     await addExpense(user.id, await builtInCategory('Food'));
 
     const { body } = await request(app).get('/api/admin/usage').set('Cookie', cookie).expect(200);
@@ -102,7 +103,8 @@ describe('GET /api/admin/usage (#125, #126)', () => {
 
     for (let index = 0; index < 5; index += 1) {
       const user = await createUser(`daily-${index}@test.com`);
-      await loginAs(user);
+      const userCookie = await loginAs(user);
+      await request(app).get('/api/auth/me').set('Cookie', userCookie).expect(200);
       await addExpense(user.id, food);
     }
 
