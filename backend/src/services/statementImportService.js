@@ -176,7 +176,7 @@ export async function previewStatement(userId, csvContent) {
   return withUser(userId, async (db) => {
     // Existing user expenses for duplicate matching
     const { rows: existingExpenses } = await db.query(
-      `SELECT id, amount::numeric, date::text, lower(merchant) as merchant, lower(note) as note
+      `SELECT id, amount::numeric, spent_on::text as date, lower(merchant) as merchant, lower(note) as note
        FROM expenses
        WHERE user_id = $1`,
       [userId],
@@ -289,12 +289,24 @@ export async function importExpenses(userId, items) {
             row: index + 1,
           });
         }
+      } else {
+        // Fallback to default 'Other' or any built-in category
+        const defaultCat = await db.query(
+          `SELECT id FROM categories WHERE user_id IS NULL AND lower(name) = 'other' LIMIT 1`,
+        );
+        categoryId = defaultCat.rows[0]?.id;
+        if (!categoryId) {
+          const anyCat = await db.query(
+            `SELECT id FROM categories WHERE user_id IS NULL LIMIT 1`,
+          );
+          categoryId = anyCat.rows[0]?.id || null;
+        }
       }
 
       const { rows } = await db.query(
-        `INSERT INTO expenses (user_id, amount, date, merchant, category_id, note)
+        `INSERT INTO expenses (user_id, amount, spent_on, merchant, category_id, note)
          VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, amount, date, merchant, category_id, note, created_at`,
+         RETURNING id, amount, spent_on, merchant, category_id, note, created_at`,
         [userId, amount.toFixed(2), dateStr, item.merchant || null, categoryId, item.note || null],
       );
 

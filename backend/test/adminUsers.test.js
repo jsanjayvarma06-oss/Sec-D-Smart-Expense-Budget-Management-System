@@ -64,8 +64,8 @@ describe('Admin User Management (#113, #114, #115)', () => {
 
     // Insert an expense for target user
     await query(
-      `INSERT INTO expenses (user_id, amount, date, merchant, note)
-       VALUES ($1, 999.50, '2026-10-25', 'Secret Shop', 'Secret Note')`,
+      `INSERT INTO expenses (user_id, amount, spent_on, category_id, merchant, note)
+       VALUES ($1, 999.50, '2026-10-25', (SELECT id FROM categories WHERE user_id IS NULL LIMIT 1), 'Secret Shop', 'Secret Note')`,
       [target.id],
     );
 
@@ -140,7 +140,12 @@ describe('Admin User Management (#113, #114, #115)', () => {
   test('disables and enables an account, and admin cannot disable self (#115)', async () => {
     const admin = await createAdmin('admin_disabler@test.com');
     const adminCookie = await loginAs(admin);
-    const target = await createUser('disable_target@test.com', 'Disable Target', 'SecurePassword123');
+
+    const regRes = await request(app)
+      .post('/api/auth/register')
+      .send({ name: 'Disable Target', email: 'disable_target@test.com', password: 'SecurePassword123' })
+      .expect(201);
+    const target = regRes.body.user;
 
     // Admin cannot disable self
     const selfRes = await request(app)

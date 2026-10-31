@@ -82,8 +82,8 @@ describe('Bank Statement Import (#99, #100, #101, #102)', () => {
 
       // Insert an existing expense
       await query(
-        `INSERT INTO expenses (user_id, amount, date, merchant, note)
-         VALUES ($1, 450.00, '2026-10-25', 'Swiggy', 'Dinner')`,
+        `INSERT INTO expenses (user_id, amount, spent_on, category_id, merchant, note)
+         VALUES ($1, 450.00, '2026-10-25', (SELECT id FROM categories WHERE user_id IS NULL AND lower(name) = 'food' LIMIT 1), 'Swiggy', 'Dinner')`,
         [user.id],
       );
 
@@ -133,7 +133,7 @@ describe('Bank Statement Import (#99, #100, #101, #102)', () => {
       assert.equal(res.body.expenses.length, 2);
 
       const { rows } = await query(
-        'SELECT * FROM expenses WHERE user_id = $1 ORDER BY date ASC',
+        'SELECT * FROM expenses WHERE user_id = $1 ORDER BY spent_on ASC',
         [user.id],
       );
       assert.equal(rows.length, 2);
