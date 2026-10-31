@@ -11,6 +11,7 @@ import {
   restoreDefaultCategory,
 } from '../services/adminCategoryService.js';
 import { getAdminOverview } from '../services/adminService.js';
+import { getUsageDashboard } from '../services/adminUsageService.js';
 import { listAdminActions, recordAdminAction } from '../services/auditLogService.js';
 import { createCategorySchema, updateCategorySchema } from '../services/categorySchemas.js';
 import { getSystemHealth } from '../services/systemHealthService.js';
@@ -73,6 +74,19 @@ export function adminRoutes() {
       const log = await listAdminActions({ adminId, action, from, to });
       await recordAdminAction({ adminId: req.user.id, action: 'view_audit_log', details: parsed.data });
       res.json(log);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+
+  // Privacy-safe aggregate usage metrics (#125, #126). No financial values,
+  // names, emails, user IDs or small identifiable groups are returned.
+  router.get('/usage', async (req, res, next) => {
+    try {
+      const usage = await getUsageDashboard();
+      await recordAdminAction({ adminId: req.user.id, action: 'view_usage_dashboard' });
+      res.json({ usage });
     } catch (err) {
       next(err);
     }

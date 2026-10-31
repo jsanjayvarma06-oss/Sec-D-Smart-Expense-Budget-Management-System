@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import AdminCategories from './AdminCategories.jsx';
 import AuditLog from './AuditLog.jsx';
 import SystemHealth from './SystemHealth.jsx';
+import UsageDashboard from './UsageDashboard.jsx';
 
 // Admin panel shell (story #109). Admins manage accounts and the system, never
 // personal finances: no section here shows anyone's expenses, income, budgets
@@ -19,6 +20,7 @@ const SECTIONS = [
 
 const BUILT = {
   categories: AdminCategories,
+  usage: UsageDashboard,
   system: SystemHealth,
   audit: AuditLog,
 };

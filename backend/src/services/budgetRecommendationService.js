@@ -15,6 +15,18 @@ export async function recommendBudgets(userId) {
       [userId],
     );
 
+    // Count distinct months across the user's whole history window. Counting
+    // the maximum months for any one category would wrongly reject users who
+    // used different categories in each of the three months.
+    const { rows: historyRows } = await db.query(
+      `SELECT COUNT(DISTINCT date_trunc('month', spent_on))::integer AS history_months
+       FROM expenses
+       WHERE user_id = $1
+         AND spent_on >= date_trunc('month', CURRENT_DATE) - INTERVAL '3 months'
+         AND spent_on < date_trunc('month', CURRENT_DATE)`,
+      [userId],
+    );
+
     // Get spending by category for the same period.
     const { rows: spendingRows } = await db.query(
       `SELECT
@@ -33,7 +45,9 @@ export async function recommendBudgets(userId) {
       [userId],
     );
 
-    const totalIncome = Number(incomeRows[0].total_income);
+    // The query covers three complete months. Convert the sum to an average
+    // monthly income before applying the budget cap (FR13 / #45).
+    const totalIncome = Math.round((Number(incomeRows[0].total_income) / MINIMUM_MONTHS) * 100) / 100;
     const categories = spendingRows.map((row) => ({
       category_id: row.category_id,
       category_name: row.category_name,
@@ -42,9 +56,7 @@ export async function recommendBudgets(userId) {
         Math.round((Number(row.total_spent) / MINIMUM_MONTHS) * 100) / 100,
     }));
 
-    const historyMonths = categories.length > 0
-      ? Math.max(...categories.map((item) => item.months_with_spending))
-      : 0;
+    const historyMonths = historyRows[0].history_months;
 
     if (historyMonths < MINIMUM_MONTHS) {
       return {
@@ -77,27 +89,25 @@ export async function recommendBudgets(userId) {
       ? budgetLimit / totalAverage
       : 1;
 
-    let allocated = 0;
-    const recommendations = categories.map((item, index) => {
-      let recommendedAmount = Math.round(
-        item.average_monthly_spending * scale * 100,
-      ) / 100;
-
-      // Avoid exceeding the overall limit because of rounding.
-      if (index === categories.length - 1) {
-        recommendedAmount = Math.max(
-          0,
-          Math.round((budgetLimit - allocated) * 100) / 100,
-        );
-      }
-
-      allocated = Math.round((allocated + recommendedAmount) * 100) / 100;
+    // Work in integer paise so rounding cannot push the total over the cap.
+    // Do not fill unused income by padding the final category: each suggestion
+    // must remain proportional to that category's observed average spending.
+    const budgetLimitPaise = Math.round(budgetLimit * 100);
+    let remainingPaise = budgetLimitPaise;
+    const recommendations = categories.map((item) => {
+      const averagePaise = Math.round(item.average_monthly_spending * 100);
+      const recommendedPaise = Math.min(
+        Math.round(averagePaise * scale),
+        remainingPaise,
+      );
+      remainingPaise -= recommendedPaise;
 
       return {
         ...item,
-        recommended_monthly_budget: recommendedAmount,
+        recommended_monthly_budget: recommendedPaise / 100,
       };
     });
+    const allocated = (budgetLimitPaise - remainingPaise) / 100;
 
     return {
       available: true,
