@@ -333,7 +333,7 @@ describe('5. Savings Goals & Recurring Expenses (UC-06, UC-07)', () => {
     assert.equal(goal.estimated_months, null);
     assert.equal(
       goal.estimate_message,
-      'Not enough savings data to estimate completion.',
+      'Your goal cannot currently be estimated at your existing saving rate.',
     );
 
     return `The goal has ${money(8000)} remaining, but there is no positive savings history. The system correctly displays "${goal.estimate_message}" instead of inventing a completion date.`;
@@ -427,8 +427,124 @@ describe('5. Savings Goals & Recurring Expenses (UC-06, UC-07)', () => {
 
     return 'Another user could neither update nor delete the goal. The original owner still has access to it.';
   });
+  planTest('UT_37', 'Test estimate when savings goal is achieved', async () => {
+    const user = await newUser();
 
-  planTest('UT_27', 'Test creating a recurring expense (FR16)', async () => {
+    const created = await api(user).post('/api/savings-goals', {
+      name: 'Completed Laptop Fund',
+      target_amount: 20000,
+      saved_amount: 20000,
+      target_date: null,
+    }).expect(201);
+
+    const goal = created.body.savingsGoal;
+
+    assert.equal(goal.remaining_amount, 0);
+    assert.equal(goal.estimated_months, 0);
+    assert.equal(
+      goal.estimate_message,
+      'Your savings goal has been reached.',
+    );
+
+    return 'The fully funded goal correctly shows 0 months remaining and confirms that the savings goal has been reached.';
+  });
+
+  planTest('UT_38', 'Test estimate recalculation after target amount changes', async () => {
+    const user = await newUser();
+
+    for (const monthsAgo of [3, 2, 1]) {
+      await api(user).post('/api/income', {
+        amount: 6000,
+        source: 'Monthly income',
+        received_on: dayInMonth(monthsAgo),
+      }).expect(201);
+    }
+
+    const created = await api(user).post('/api/savings-goals', {
+      name: 'Laptop Fund',
+      target_amount: 20000,
+      saved_amount: 5000,
+      target_date: null,
+    }).expect(201);
+
+    assert.equal(created.body.savingsGoal.estimated_months, 3);
+
+    const updated = await api(user).put(
+      `/api/savings-goals/${created.body.savingsGoal.id}`,
+      {
+        name: 'Laptop Fund',
+        target_amount: 29000,
+        saved_amount: 5000,
+        target_date: null,
+        status: 'active',
+      },
+    ).expect(200);
+
+    const goal = updated.body.savingsGoal;
+
+    assert.equal(goal.remaining_amount, 24000);
+    assert.equal(goal.estimated_months, 4);
+    assert.equal(
+      goal.estimate_message,
+      'Approximately 4 month(s) remaining.',
+    );
+
+    return 'Increasing the target amount recalculated the estimate from 3 to 4 months.';
+  });
+  planTest('UT_39', 'Test estimate recalculation after savings rate changes', async () => {
+  const user = await newUser();
+
+  // Add ₹6,000 income in each of the previous three completed months.
+  for (const monthsAgo of [3, 2, 1]) {
+    await api(user).post('/api/income', {
+      amount: 6000,
+      source: 'Monthly income',
+      received_on: dayInMonth(monthsAgo),
+    }).expect(201);
+  }
+
+  // Create a goal with ₹15,000 remaining.
+  const created = await api(user).post('/api/savings-goals', {
+    name: 'Travel Fund',
+    target_amount: 20000,
+    saved_amount: 5000,
+    target_date: null,
+  }).expect(201);
+
+  const initialGoal = created.body.savingsGoal;
+
+  assert.equal(initialGoal.average_monthly_savings, 6000);
+  assert.equal(initialGoal.remaining_amount, 15000);
+  assert.equal(initialGoal.estimated_months, 3);
+
+  // Increase income in one of the previous three months.
+  await api(user).post('/api/income', {
+    amount: 6000,
+    source: 'Additional income',
+    received_on: dayInMonth(1),
+  }).expect(201);
+
+  // Fetch the goal again to verify recalculation.
+  const list = (await api(user).get('/api/savings-goals')
+    .expect(200)).body.savingsGoals;
+
+  const updatedGoal = list.find(
+    (item) => item.id === initialGoal.id,
+  );
+
+  assert.ok(updatedGoal);
+  assert.equal(updatedGoal.average_monthly_savings, 8000);
+  assert.equal(updatedGoal.remaining_amount, 15000);
+  assert.equal(updatedGoal.estimated_months, 2);
+  assert.equal(
+    updatedGoal.estimate_message,
+    'Approximately 2 month(s) remaining.',
+  );
+
+  return 'Increasing average monthly savings from ₹6,000 to ₹8,000 recalculated the completion estimate from 3 months to 2 months.';
+});
+
+planTest('UT_27', 'Test creating a recurring expense (FR16)', async () => {
     const user = await newUser();
     const res = await api(user).post('/api/recurring-expenses', {
       amount: 6000, category_id: await categoryId(user, 'Rent'), cycle: 'monthly', start_date: localDay(0),

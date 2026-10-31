@@ -16,9 +16,8 @@ function addGoalDetails(goal, averageMonthlySavings) {
   const progress = calculateProgress(savedAmount, targetAmount);
 
   let estimatedMonths = null;
-  let estimateMessage = 'Not enough savings data to estimate completion.';
-
-  if (remainingAmount === 0) {
+  let estimateMessage =
+  'Your goal cannot currently be estimated at your existing saving rate.'; if (remainingAmount === 0) {
     estimatedMonths = 0;
     estimateMessage = 'Your savings goal has been reached.';
   } else if (averageMonthlySavings > 0) {
