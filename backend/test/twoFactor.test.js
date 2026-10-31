@@ -200,7 +200,11 @@ describe('Two-factor login & backup codes (#105, #106)', () => {
 
   test('login when 2FA is on requires code step, and wrong codes count toward lockout (#105)', async () => {
     const password = 'StrongPassword123';
-    const user = await createUser('user2fa@test.com', 'User 2FA', password);
+    const regRes = await request(app)
+      .post('/api/auth/register')
+      .send({ name: 'User 2FA', email: 'user2fa@test.com', password })
+      .expect(201);
+    const user = regRes.body.user;
     const cookie = await loginAs(user);
 
     // Turn on 2FA
@@ -242,7 +246,11 @@ describe('Two-factor login & backup codes (#105, #106)', () => {
 
   test('single-use backup codes allow login once and cannot be reused (#105)', async () => {
     const password = 'StrongPassword123';
-    const user = await createUser('backup_code_user@test.com', 'Backup User', password);
+    const regRes = await request(app)
+      .post('/api/auth/register')
+      .send({ name: 'Backup User', email: 'backup_code_user@test.com', password })
+      .expect(201);
+    const user = regRes.body.user;
     const cookie = await loginAs(user);
 
     // Turn on 2FA and get backup codes
@@ -273,7 +281,11 @@ describe('Two-factor login & backup codes (#105, #106)', () => {
 
   test('disabling 2FA requires a current code and allows plain login afterwards (#106)', async () => {
     const password = 'StrongPassword123';
-    const user = await createUser('disable_2fa_user@test.com', 'Disable 2FA User', password);
+    const regRes = await request(app)
+      .post('/api/auth/register')
+      .send({ name: 'Disable 2FA User', email: 'disable_2fa_user@test.com', password })
+      .expect(201);
+    const user = regRes.body.user;
     const cookie = await loginAs(user);
 
     // Setup 2FA
