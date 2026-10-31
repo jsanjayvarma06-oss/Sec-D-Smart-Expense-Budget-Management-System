@@ -72,6 +72,29 @@ describe('Budget recommendation API', () => {
     );
   });
 
+
+  test('recognizes three months of history spread across different categories', async () => {
+    const user = await createUser('budget-history@test.com');
+    const cookie = await loginAs(user);
+    const { body: categoryBody } = await request(app).get('/api/categories').set('Cookie', cookie).expect(200);
+    const names = ['Food', 'Transport', 'Housing'];
+    const categories = names.map((name) => categoryBody.categories.find((category) => category.name === name));
+    assert.ok(categories.every(Boolean));
+
+    for (let month = 1; month <= 3; month += 1) {
+      const date = monthsAgo(month, 10);
+      await request(app).post('/api/income').set('Cookie', cookie)
+        .send({ amount: 12000, source: 'Salary', received_on: date }).expect(201);
+      await request(app).post('/api/expenses').set('Cookie', cookie)
+        .send({ amount: 900, category_id: categories[month - 1].id, spent_on: date }).expect(201);
+    }
+
+    const { body } = await request(app).get('/api/budgets/recommendations').set('Cookie', cookie).expect(200);
+    assert.equal(body.recommendations.available, true);
+    assert.equal(body.recommendations.total_monthly_income, 12000);
+    assert.equal(body.recommendations.categories.length, 3);
+  });
+
   test('returns a valid response for a logged-in user', async () => {
     const user = await createUser();
     const cookie = await loginAs(user);
