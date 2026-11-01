@@ -102,7 +102,7 @@ under `/api`, using JSON in both directions.
 | GET | `/api/analytics/monthly` | `?month=YYYY-MM` | Total spent, comparison with the previous month, totals by category and by day (the data for the charts) |
 | GET | `/api/forecast/monthly` | none | Forecast for this month from the last 3 complete months; `available: false` with a reason when there's too little history |
 | GET | `/api/financial-health` | `?month=YYYY-MM` | Score 0–100, rating, income, expenses, savings rate, budget use and the reasons behind the score |
-| POST | `/api/what-if/simulate` | `month`, `proposedBudget`, `proposedIncome` | Simulate a different budget and income for a month, with the forecast; nothing is saved |
+| POST | `/api/what-if/simulate` | Either `month`, `proposedBudget`, `proposedIncome` or `month`, `purchaseAmount`, optional `category_id` | Simulate a budget/income change or test a planned purchase against the saved monthly budget and spending; returns affordability and remaining balance/shortfall. Nothing is saved |
 
 ## Limits
 
