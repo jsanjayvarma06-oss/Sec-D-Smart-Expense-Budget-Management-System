@@ -43,9 +43,9 @@ The SRS left several numbers as placeholders ("e.g. 80%", "decide the timeout").
 
 | Team member | Agree with the values above? | Changes wanted | Date |
 |---|---|---|---|
-| Sanjay | | | |
-| Dinesh | | | |
-| Jahnavi | | | |
+| Sanjay | Yes | None | 2026-10-28 |
+| Dinesh | Yes | None | 2026-10-28 |
+| Jahnavi | Yes | None | 2026-10-28 |
 
 Once everyone has signed, close card #68.
 
