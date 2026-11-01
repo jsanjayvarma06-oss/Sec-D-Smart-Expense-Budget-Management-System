@@ -94,20 +94,101 @@ export async function createExpense(userId, expense) {
     };
   });
 }
-export async function listExpenses(userId) {
+export async function listExpenses(userId, options = {}) {
   return withUser(userId, async (db) => {
+    const conditions = ['e.user_id = $1'];
+    const values = [userId];
+
+    function addCondition(sql, value) {
+      values.push(value);
+      conditions.push(sql.replace('?', `$${values.length}`));
+    }
+
+    // Search by merchant, note, or category name.
+    if (options.search) {
+      const searchValue = `%${options.search}%`;
+
+      values.push(searchValue, searchValue, searchValue);
+
+      const index = values.length;
+
+      conditions.push(
+        `(e.merchant ILIKE $${index - 2}
+          OR e.note ILIKE $${index - 1}
+          OR c.name ILIKE $${index})`,
+      );
+    }
+
+    // Filter by category.
+    if (options.category_id) {
+      addCondition('e.category_id = ?', options.category_id);
+    }
+
+    // Filter by starting date.
+    if (options.start_date) {
+      addCondition('e.spent_on >= ?::date', options.start_date);
+    }
+
+    // Filter by ending date.
+    if (options.end_date) {
+      addCondition('e.spent_on <= ?::date', options.end_date);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    // Get the total number of matching expenses.
+    const countResult = await db.query(
+      `SELECT COUNT(*)::integer AS total
+       FROM expenses e
+       JOIN categories c ON c.id = e.category_id
+       WHERE ${whereClause}`,
+      values,
+    );
+
+    const total = countResult.rows[0].total;
+
+    let pagination = null;
+    const queryValues = [...values];
+    let paginationClause = '';
+
+    // Apply pagination when list options are supplied.
+    if (options.paginate) {
+      const page = Number(options.page || 1);
+      const limit = Number(options.limit || 10);
+      const offset = (page - 1) * limit;
+
+      queryValues.push(limit, offset);
+
+      paginationClause = `
+        LIMIT $${queryValues.length - 1}
+        OFFSET $${queryValues.length}
+      `;
+
+      pagination = {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      };
+    }
+
+    // Fetch the matching expenses.
     const { rows } = await db.query(
       `SELECT e.id, e.category_id, c.name AS category_name,
               e.amount, e.spent_on, e.note, e.merchant, e.is_flagged,
               e.created_at, e.updated_at
        FROM expenses e
        JOIN categories c ON c.id = e.category_id
-       WHERE e.user_id = $1
-       ORDER BY e.spent_on DESC, e.created_at DESC`,
-      [userId],
+       WHERE ${whereClause}
+       ORDER BY e.spent_on DESC, e.created_at DESC
+       ${paginationClause}`,
+      queryValues,
     );
 
-    return rows.map(formatExpense);
+    return {
+      expenses: rows.map(formatExpense),
+      pagination,
+    };
   });
 }
 

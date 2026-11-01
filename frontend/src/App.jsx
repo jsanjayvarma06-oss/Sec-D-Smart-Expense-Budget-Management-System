@@ -410,6 +410,18 @@ function Dashboard({ user, onLogout, onOpenAdmin, onUserChanged }) {
   const [budgets, setBudgets] = useState([]);
   const [categories, setCategories] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  // Issue #34: Expense history search, filters and pagination
+const [expenseHistory, setExpenseHistory] = useState([]);
+const [expensePagination, setExpensePagination] = useState(null);
+
+const [expenseSearch, setExpenseSearch] = useState('');
+const [expenseCategoryFilter, setExpenseCategoryFilter] = useState('');
+const [expenseStartDate, setExpenseStartDate] = useState('');
+const [expenseEndDate, setExpenseEndDate] = useState('');
+
+const [expensePage, setExpensePage] = useState(1);
+const [expenseHistoryLoading, setExpenseHistoryLoading] = useState(false);
+const [expenseHistoryError, setExpenseHistoryError] = useState('');
   const [expenseForm, setExpenseForm] = useState(emptyExpense);
   const [suggestedCategoryId, setSuggestedCategoryId] = useState('');
   const [voiceNote, setVoiceNote] = useState({ kind: '', text: '' });
@@ -458,6 +470,37 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
     setRefreshVersion((version) => version + 1);
   }, []);
 
+async function handleExportCsv() {
+    try {
+      const response = await fetch(
+        `/api/reports/export?month=${encodeURIComponent(month)}&format=csv`,
+        {
+          credentials: 'include',
+        },
+      );
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || 'Could not export CSV report.');
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `expense-report-${month}.csv`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message || 'Could not export CSV report.');
+    }
+  }
+
   useEffect(() => {
     let active = true;
 
@@ -476,8 +519,7 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
           forecastResult,
           savingsGoalResult,
         ] = await Promise.all([
-      
-            apiRequest(
+          apiRequest(
               `/api/budgets/remaining?month=${encodeURIComponent(month)}`,
             ),
             apiRequest('/api/categories'),
@@ -551,6 +593,81 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
       active = false;
     };
   }, [month, refreshVersion]);
+  // Issue #34: Load the current page of expense history.
+useEffect(() => {
+  let active = true;
+
+  async function loadExpenseHistory() {
+    setExpenseHistoryLoading(true);
+    setExpenseHistoryError('');
+
+    const params = new URLSearchParams({
+      page: String(expensePage),
+      limit: '10',
+    });
+
+    if (expenseSearch.trim()) {
+      params.set('search', expenseSearch.trim());
+    }
+
+    if (expenseCategoryFilter) {
+      params.set('category_id', expenseCategoryFilter);
+    }
+
+    if (expenseStartDate) {
+      params.set('start_date', expenseStartDate);
+    }
+
+    if (expenseEndDate) {
+      params.set('end_date', expenseEndDate);
+    }
+
+    try {
+      const result = await apiRequest(
+        `/api/expenses?${params.toString()}`
+      );
+
+      if (!active) return;
+
+      setExpenseHistory(result.expenses || []);
+      setExpensePagination(result.pagination || null);
+
+      // Handle cases where deleting an expense reduces the total pages.
+      const totalPages = result.pagination?.totalPages ?? 0;
+
+      if (totalPages > 0 && expensePage > totalPages) {
+        setExpensePage(totalPages);
+      } else if (totalPages === 0 && expensePage !== 1) {
+        setExpensePage(1);
+      }
+    } catch (err) {
+      if (active) {
+        setExpenseHistoryError(
+          err.message || 'Could not load expense history.'
+        );
+        setExpenseHistory([]);
+        setExpensePagination(null);
+      }
+    } finally {
+      if (active) {
+        setExpenseHistoryLoading(false);
+      }
+    }
+  }
+
+  loadExpenseHistory();
+
+  return () => {
+    active = false;
+  };
+}, [
+  expensePage,
+  expenseSearch,
+  expenseCategoryFilter,
+  expenseStartDate,
+  expenseEndDate,
+  refreshVersion,
+]);
 
   const overallBudget = budgets.find(
     (budget) => budget.category_id === null,
@@ -568,16 +685,6 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
     (total, expense) => total + Number(expense.amount || 0),
     0,
   );
-
-  const sortedExpenses = [...expenses].sort((a, b) => {
-    const dateCompare = String(b.spent_on).localeCompare(String(a.spent_on));
-    if (dateCompare !== 0) return dateCompare;
-
-    return String(b.created_at || '').localeCompare(
-      String(a.created_at || ''),
-    );
-  });
-
   function updateField(event) {
     const { name, value } = event.target;
 
@@ -798,10 +905,8 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
       target_date: '',
     });
   }
-  
   function handleEditSavingsGoal(goal) {
     setEditingSavingsGoalId(goal.id);
-  
     setSavingsGoalForm({
       name: goal.name || '',
       target_amount: String(goal.target_amount ?? ''),
@@ -811,44 +916,35 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
         : '',
     });
   }
-  
   async function handleSavingsGoalSubmit(event) {
     event.preventDefault();
     setError('');
     setMessage('');
-  
     const targetAmount = Number(savingsGoalForm.target_amount);
     const savedAmount = Number(savingsGoalForm.saved_amount || 0);
-  
     if (!savingsGoalForm.name.trim()) {
       setError('Please enter a savings goal name.');
       return;
     }
-  
     if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
       setError('Target amount must be greater than zero.');
       return;
     }
-  
     if (!Number.isFinite(savedAmount) || savedAmount < 0) {
       setError('Saved amount cannot be negative.');
       return;
     }
-  
     if (savedAmount > targetAmount) {
       setError('Saved amount cannot be greater than the target amount.');
       return;
     }
-  
     setSavingsGoalSaving(true);
-  
     const payload = {
       name: savingsGoalForm.name.trim(),
       target_amount: targetAmount,
       saved_amount: savedAmount,
       target_date: savingsGoalForm.target_date || null,
     };
-  
     try {
       if (editingSavingsGoalId) {
         await apiRequest(
@@ -858,17 +954,14 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
             body: JSON.stringify(payload),
           },
         );
-  
-        setMessage('Savings goal updated successfully.');
+      setMessage('Savings goal updated successfully.');
       } else {
         await apiRequest('/api/savings-goals', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
-  
-        setMessage('Savings goal created successfully.');
+      setMessage('Savings goal created successfully.');
       }
-  
       cancelSavingsGoalEditing();
       refreshData();
     } catch (err) {
@@ -877,28 +970,22 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
       setSavingsGoalSaving(false);
     }
   }
-  
   async function handleDeleteSavingsGoal(goal) {
     const confirmed = window.confirm(
       `Delete the savings goal "${goal.name}"? This cannot be undone.`,
     );
-  
     if (!confirmed) return;
-  
     setError('');
     setMessage('');
-  
-    try {
+      try {
       await apiRequest(
         `/api/savings-goals/${encodeURIComponent(goal.id)}`,
         { method: 'DELETE' },
       );
-  
-      if (editingSavingsGoalId === goal.id) {
+    if (editingSavingsGoalId === goal.id) {
         cancelSavingsGoalEditing();
       }
-  
-      setMessage('Savings goal deleted successfully.');
+    setMessage('Savings goal deleted successfully.');
       refreshData();
     } catch (err) {
       setError(err.message || 'Could not delete savings goal.');
@@ -915,7 +1002,6 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
       setError('Budget must be greater than zero.');
       return;
     }
-
     setBudgetSaving(true);
 
     try {
@@ -927,7 +1013,6 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
           category_id: null,
         }),
       });
-
       setBudgetAmount('');
       setMessage('Monthly budget saved successfully.');
       refreshData();
@@ -937,8 +1022,7 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
       setBudgetSaving(false);
     }
   }
-
-  async function handleCategoryBudgetSubmit(event) {
+    async function handleCategoryBudgetSubmit(event) {
     event.preventDefault();
     setError('');
     setMessage('');
@@ -966,7 +1050,6 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
           category_id: categoryBudgetForm.category_id,
         }),
       });
-
       setCategoryBudgetForm({ category_id: '', amount: '' });
       setMessage('Category budget saved successfully.');
       refreshData();
@@ -976,8 +1059,7 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
       setCategoryBudgetSaving(false);
     }
   }
-
-  async function handleCreateRecurringExpense(event) {
+    async function handleCreateRecurringExpense(event) {
     event.preventDefault();
     setError('');
     setMessage('');
@@ -1037,8 +1119,7 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
       setCategorySaving(false);
     }
   }
-
-  async function handleCategoryDelete(category) {
+    async function handleCategoryDelete(category) {
     setError('');
     setMessage('');
 
@@ -1082,9 +1163,7 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
     } finally {
       setSubscriptionSaving('');
     }
-  }
-
-  // UC-07: marking the unpaid cycle as paid stops its reminders.
+  }// UC-07: marking the unpaid cycle as paid stops its reminders.
   async function handleMarkRecurringPaid(payment) {
     setError('');
     setMessage('');
@@ -1104,7 +1183,6 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
       setError(err.message || 'Could not mark the payment as paid.');
     }
   }
-
   async function handleMarkNotificationRead(notification) {
     setError('');
 
@@ -1122,7 +1200,6 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
       setError(err.message || 'Could not mark notification as read.');
     }
   }
-
   async function handleLogout() {
     setError('');
 
@@ -1662,7 +1739,7 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
           <BudgetPace budget={overallBudget} />
         </article>
       </section>
-      
+
 <SpendingCharts
   expenses={monthExpenses}
   allExpenses={expenses}
@@ -2028,15 +2105,17 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
           </div>
         </form>
       </section>
-
       <section className="expense-section">
         <div className="expense-list-heading">
           <div>
-            <h2>Expense history</h2>
+            <div className="expense-history-title-row">
+              <h2>Expense history</h2>
+            </div>
             <p className="muted">
-              Showing all your recorded expenses. Selected month: {month}.
+              Search and filter your expenses. Showing 10 records per page.
             </p>
           </div>
+
           <div className="expense-list-heading-actions">
             <button
               type="button"
@@ -2045,90 +2124,272 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
             >
               Import Bank Statement (CSV)
             </button>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleExportCsv}
+            >
+              Export CSV
+            </button>
+
             <strong>{monthExpenses.length} this month</strong>
           </div>
         </div>
 
-        {!loading && sortedExpenses.length === 0 && (
-          <div className="empty-state">
-            <h3>No expenses yet</h3>
-            <p>Add your first expense using the form above.</p>
-          </div>
-        )}
+  {/* Search and filters */}
+  <div className="expense-history-filters">
+    <label>
+      Search expenses
+      <input
+        type="search"
+        value={expenseSearch}
+        onChange={(event) => {
+          setExpenseSearch(event.target.value);
+          setExpensePage(1);
+        }}
+        placeholder="Search merchant, note, or category"
+        maxLength={100}
+      />
+    </label>
 
-        {sortedExpenses.length > 0 && (
-          <div className="expense-table-wrapper">
-            <table className="expense-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Expense</th>
-                  <th>Category</th>
-                  <th>Amount</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedExpenses.map((expense) => (
-  <tr key={expense.id}>
-    <td>{String(expense.spent_on).slice(0, 10)}</td>
-    <td>
-      <strong>{expense.merchant || 'Expense'}</strong>
-      {expense.note && (
-        <p className="muted expense-note">{expense.note}</p>
-      )}
-      {expense.is_flagged && (
-        <p className="expense-warning">
-          ⚠ Unusual spending detected. Edit it if the amount is wrong, or mark
-          it as reviewed if it is correct.
+    <label>
+      Category
+      <select
+        value={expenseCategoryFilter}
+        onChange={(event) => {
+          setExpenseCategoryFilter(event.target.value);
+          setExpensePage(1);
+        }}
+      >
+        <option value="">All categories</option>
+
+        {categories.map((category) => (
+          <option key={category.id} value={category.id}>
+            {category.name}
+          </option>
+        ))}
+      </select>
+    </label>
+
+    <label>
+      From date
+      <input
+        type="date"
+        value={expenseStartDate}
+        max={expenseEndDate || undefined}
+        onChange={(event) => {
+          setExpenseStartDate(event.target.value);
+          setExpensePage(1);
+        }}
+      />
+    </label>
+
+    <label>
+      To date
+      <input
+        type="date"
+        value={expenseEndDate}
+        min={expenseStartDate || undefined}
+        onChange={(event) => {
+          setExpenseEndDate(event.target.value);
+          setExpensePage(1);
+        }}
+      />
+    </label>
+
+    <button
+      type="button"
+      className="secondary-button expense-clear-filters"
+      onClick={() => {
+        setExpenseSearch('');
+        setExpenseCategoryFilter('');
+        setExpenseStartDate('');
+        setExpenseEndDate('');
+        setExpensePage(1);
+      }}
+    >
+      Clear filters
+    </button>
+  </div>
+
+  {/* Error message */}
+  {expenseHistoryError && (
+    <p className="error-message" role="alert">
+      {expenseHistoryError}
+    </p>
+  )}
+
+  {/* Loading message */}
+  {expenseHistoryLoading && (
+    <p className="muted" role="status">
+      Loading expenses…
+    </p>
+  )}
+
+  {/* Empty state */}
+  {!expenseHistoryLoading &&
+    !expenseHistoryError &&
+    expenseHistory.length === 0 && (
+      <div className="empty-state">
+        <h3>No matching expenses</h3>
+
+        <p>
+          {expenseSearch ||
+          expenseCategoryFilter ||
+          expenseStartDate ||
+          expenseEndDate
+            ? 'Try changing or clearing your search and filters.'
+            : 'Add your first expense using the form above.'}
         </p>
-      )}
-    </td>
-    <td>
-      {expense.category_name ||
-        categories.find(
-          (category) => category.id === expense.category_id,
-        )?.name ||
-        'Category'}
-    </td>
-    <td className="expense-amount">
-      {formatCurrency(expense.amount)}
-    </td>
-    <td>
-      <div className="table-actions">
-        {expense.is_flagged && (
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => handleReviewExpense(expense)}
-          >
-            Mark as reviewed
-          </button>
-        )}
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => startEditing(expense)}
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          className="danger-button"
-          onClick={() => handleDelete(expense)}
-        >
-          Delete
-        </button>
       </div>
-    </td>
-  </tr>
-))}
+    )}
 
-              </tbody>
-            </table>
+  {/* Expense table */}
+  {expenseHistory.length > 0 && (
+    <>
+      <div className="expense-table-wrapper">
+        <table className="expense-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Expense</th>
+              <th>Category</th>
+              <th>Amount</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {expenseHistory.map((expense) => (
+              <tr key={expense.id}>
+                <td>
+                  {String(expense.spent_on).slice(0, 10)}
+                </td>
+
+                <td>
+                  <strong>
+                    {expense.merchant || 'Expense'}
+                  </strong>
+
+                  {expense.note && (
+                    <p className="muted expense-note">
+                      {expense.note}
+                    </p>
+                  )}
+
+                  {expense.is_flagged && (
+                    <p className="expense-warning">
+                      ⚠ Unusual spending detected. Edit it if the
+                      amount is wrong, or mark it as reviewed if it
+                      is correct.
+                    </p>
+                  )}
+                </td>
+
+                <td>
+                  {expense.category_name ||
+                    categories.find(
+                      (category) =>
+                        category.id === expense.category_id
+                    )?.name ||
+                    'Category'}
+                </td>
+
+                <td className="expense-amount">
+                  {formatCurrency(expense.amount)}
+                </td>
+
+                <td>
+                  <div className="table-actions">
+                    {expense.is_flagged && (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() =>
+                          handleReviewExpense(expense)
+                        }
+                      >
+                        Mark as reviewed
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => startEditing(expense)}
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      type="button"
+                      className="danger-button"
+                      onClick={() => handleDelete(expense)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {expensePagination && (
+        <div className="expense-pagination">
+          <span className="muted">
+            {`Showing ${
+              (expensePagination.page - 1) *
+                expensePagination.limit +
+              1
+            }–${Math.min(
+              expensePagination.page *
+                expensePagination.limit,
+              expensePagination.total
+            )} of ${expensePagination.total} expenses`}
+          </span>
+
+          <div className="expense-pagination-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() =>
+                setExpensePage((page) => Math.max(1, page - 1))
+              }
+              disabled={
+                expenseHistoryLoading ||
+                expensePagination.page <= 1
+              }
+            >
+              Previous
+            </button>
+
+            <span>
+              Page {expensePagination.page} of{' '}
+              {Math.max(1, expensePagination.totalPages)}
+            </span>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setExpensePage((page) => page + 1)}
+              disabled={
+                expenseHistoryLoading ||
+                expensePagination.page >=
+                  expensePagination.totalPages
+              }
+            >
+              Next
+            </button>
+          </div>
           </div>
         )}
-      </section>
+      </>
+    )}
+  </section>
 
       {statementImportOpen && (
         <StatementImport
@@ -2143,7 +2404,6 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
       )}
 
       <TwoFactorSetup user={user} apiRequest={apiRequest} onEnabled={onUserChanged} />
-
       <footer className="dashboard-footer">
         <p className="muted">Signed in as {user.email}.</p>
         <button

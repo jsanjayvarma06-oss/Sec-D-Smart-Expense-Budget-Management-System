@@ -347,4 +347,3 @@ describe('Two-factor login & backup codes (#105, #106)', () => {
     assert.notDeepEqual(regenRes.body.backup_codes, oldCodes);
   });
 });
-
