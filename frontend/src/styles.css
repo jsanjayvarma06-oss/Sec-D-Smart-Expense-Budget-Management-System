@@ -1786,3 +1786,56 @@ h3 {
   gap: 20px;
 }
 
+
+/* Receipt Scanner (#83, #84, #85, #86) */
+.receipt-scanner-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.receipt-scan-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.receipt-scan-button.scanning {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+.receipt-scan-progress {
+  position: relative;
+  height: 8px;
+  background: #e4e7ec;
+  border-radius: 8px;
+  overflow: hidden;
+  width: 100%;
+  max-width: 280px;
+}
+
+.receipt-scan-progress-bar {
+  height: 100%;
+  background: #2e7d32;
+  border-radius: 8px;
+  transition: width 0.25s ease;
+}
+
+.receipt-scan-status {
+  display: block;
+  font-size: 12px;
+  color: #475467;
+  margin-top: 4px;
+}
+
+.receipt-scan-error {
+  margin: 4px 0 0;
+}
+
+/* Highlight fields populated from receipt scan — cleared when the user edits (#86) */
+.receipt-detected-field {
+  border-color: #2e7d32 !important;
+  background: #f0f9f4 !important;
+  outline: none;
+}
