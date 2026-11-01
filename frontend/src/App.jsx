@@ -5,6 +5,7 @@ import SubscriptionsCard from './SubscriptionsCard.jsx';
 import AdminPanel from './AdminPanel.jsx';
 import TwoFactorSetup from './TwoFactorSetup.jsx';
 import StatementImport from './StatementImport.jsx';
+import WhatIfSimulator from './WhatIfSimulator.jsx';
 import { parseSpokenExpense } from './voiceParser.js';
 
 const currentMonth = new Date().toISOString().slice(0, 7);
@@ -1586,6 +1587,8 @@ const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
           <p className="muted">The forecast is not available yet.</p>
         )}
       </section>
+
+      <WhatIfSimulator apiRequest={apiRequest} month={month} categories={categories} />
 
       <section className="budget-alerts" aria-label="Financial health score">
         <h2>Financial Health Score</h2>
