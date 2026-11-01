@@ -22,7 +22,7 @@ Built by Team Sec-D: Sanjay, Dinesh and Jahnavi.
 | Spending by category and month (chart data) | FR10 | Charts not yet | Yes |
 | Monthly spending forecast | FR12 | Yes | Yes |
 | Budget recommendations | FR13 | Not yet | Yes, with a known issue (#45) |
-| What-if simulator | FR19 | Not yet | Budget/income simulation; planned-purchase mode missing (#47) |
+| What-if simulator | FR19 | Yes | Planned purchase verdict and remaining balance/shortfall; read-only (#47) |
 | Category suggestion from merchant | FR05 | Yes | Yes |
 | Built-in categories managed by admins | Admin panel | Yes | Yes |
 | Savings goals | FR14, FR15 | No | No |
