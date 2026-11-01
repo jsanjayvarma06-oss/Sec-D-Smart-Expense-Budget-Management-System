@@ -29,7 +29,7 @@ export async function simulateBudget(userId, { month, proposedBudget, proposedIn
   const [spendingResult, forecast] = await Promise.all([
     withUser(userId, async (db) => {
       const result = await db.query(
-        'SELECT COALESCE(SUM(amount), 0)::numeric(12,2) AS total_spent, COUNT(*)::integer AS transaction_count FROM expenses WHERE user_id = $1 AND spent_on >= $2::date AND spent_on < ($2::date + INTERVAL \\'1 month\\')',
+        "SELECT COALESCE(SUM(amount), 0)::numeric(12,2) AS total_spent, COUNT(*)::integer AS transaction_count FROM expenses WHERE user_id = $1 AND spent_on >= $2::date AND spent_on < ($2::date + INTERVAL '1 month')",
         [userId, monthStart],
       );
       return { totalSpent: Number(result.rows[0].total_spent), transactionCount: result.rows[0].transaction_count };
@@ -84,7 +84,7 @@ export async function simulatePurchase(userId, { month, purchaseAmount, category
         [userId, monthStart],
       ),
       db.query(
-        'SELECT COALESCE(SUM(amount), 0)::numeric(12,2) AS amount, COUNT(*)::integer AS transaction_count FROM expenses WHERE user_id = $1 AND spent_on >= $2::date AND spent_on < ($2::date + INTERVAL \\'1 month\\')',
+        "SELECT COALESCE(SUM(amount), 0)::numeric(12,2) AS amount, COUNT(*)::integer AS transaction_count FROM expenses WHERE user_id = $1 AND spent_on >= $2::date AND spent_on < ($2::date + INTERVAL '1 month')",
         [userId, monthStart],
       ),
     ]);
