@@ -64,9 +64,10 @@ export function localDay(offsetDays = 0) {
 // A date in the month `monthsAgo` months before this one.
 export function dayInMonth(monthsAgo, dayOfMonth = 10) {
   const d = new Date();
+  const effectiveDay = monthsAgo === 0 ? Math.min(dayOfMonth, d.getDate()) : dayOfMonth;
   d.setDate(1);
   d.setMonth(d.getMonth() - monthsAgo);
-  d.setDate(dayOfMonth);
+  d.setDate(effectiveDay);
   return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
 }
 
