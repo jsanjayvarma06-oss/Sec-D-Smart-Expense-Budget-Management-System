@@ -1634,3 +1634,34 @@ h3 {
   border-color: #fde68a;
   color: #92400e;
 }
+
+/* Planned purchase simulator (#47) */
+.what-if-section {
+  margin-top: 24px;
+}
+
+.what-if-result {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.what-if-result h3 {
+  margin-top: 0;
+}
+
+.what-if-result.affordable {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.what-if-result.not-affordable {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.what-if-result p {
+  margin: 8px 0;
+}
