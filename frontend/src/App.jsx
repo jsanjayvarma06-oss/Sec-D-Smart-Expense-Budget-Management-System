@@ -6,6 +6,7 @@ import AdminPanel from './AdminPanel.jsx';
 import TwoFactorSetup from './TwoFactorSetup.jsx';
 import StatementImport from './StatementImport.jsx';
 import WhatIfSimulator from './WhatIfSimulator.jsx';
+import AskMoney from './AskMoney.jsx';
 import { parseSpokenExpense } from './voiceParser.js';
 
 const currentMonth = new Date().toISOString().slice(0, 7);
@@ -1666,6 +1667,8 @@ useEffect(() => {
       </section>
 
       <WhatIfSimulator apiRequest={apiRequest} month={month} categories={categories} />
+
+      <AskMoney apiRequest={apiRequest} />
 
       <section className="budget-alerts" aria-label="Financial health score">
         <h2>Financial Health Score</h2>

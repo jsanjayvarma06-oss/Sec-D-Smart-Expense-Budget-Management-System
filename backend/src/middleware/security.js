@@ -1,6 +1,7 @@
 import { rateLimit } from 'express-rate-limit';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { recordSecurityEvent } from '../services/securityMonitorService.js';
 
 // Refuses plain HTTP in production (SR06). Locally the Vite proxy uses HTTP.
 export function requireHttps(req, res, next) {
@@ -19,6 +20,12 @@ export function createRateLimiter({ windowMinutes, limit, name }) {
     legacyHeaders: false,
     handler: (req, res) => {
       logger.warn('Rate limit exceeded', { limiter: name, ip: req.ip, path: req.originalUrl });
+      recordSecurityEvent({
+        eventType: 'rate_limit_blocked',
+        email: req.body?.email || null,
+        ipAddress: req.ip,
+        details: { limiter: name, path: req.originalUrl },
+      }).catch(() => {});
       res.status(429).json({
         error: 'Too many attempts. Please wait a few minutes and try again.',
         code: 'RATE_LIMITED',

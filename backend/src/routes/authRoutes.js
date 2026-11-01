@@ -25,6 +25,7 @@ import {
   verifyTwoFactorOrBackupCode,
 } from '../services/twoFactorService.js';
 import { requestPasswordReset, resetPassword } from '../services/passwordResetService.js';
+import { recordSecurityEvent } from '../services/securityMonitorService.js';
 import { query } from '../db/pool.js';
 import { HttpError } from '../utils/httpError.js';
 import { logger } from '../utils/logger.js';
@@ -74,18 +75,33 @@ export function authRoutes() {
       // the response time reveals whether an email exists.
       if (!user) {
         await verifyAgainstDummyHash(password);
+        await recordSecurityEvent({
+          eventType: 'login_failed',
+          email,
+          ipAddress: req.ip,
+        }).catch(() => {});
         throw new HttpError(401, 'Invalid email or password', {
           code: 'INVALID_CREDENTIALS',
         });
       }
 
       if (user.disabled_at) {
+        await recordSecurityEvent({
+          eventType: 'disabled_account_login_attempt',
+          email,
+          ipAddress: req.ip,
+        }).catch(() => {});
         throw new HttpError(403, 'This account has been disabled. Please contact an administrator.', {
           code: 'ACCOUNT_DISABLED',
         });
       }
 
       if (isLocked(user)) {
+        await recordSecurityEvent({
+          eventType: 'account_locked',
+          email,
+          ipAddress: req.ip,
+        }).catch(() => {});
         throw new HttpError(429, 'Too many failed attempts. Please try again later.', {
           code: 'ACCOUNT_LOCKED',
         });
@@ -94,7 +110,19 @@ export function authRoutes() {
       const passwordMatches = await verifyPassword(password, user.password_hash);
 
       if (!passwordMatches) {
-        await recordFailedLogin(user.id);
+        const failure = await recordFailedLogin(user.id);
+        await recordSecurityEvent({
+          eventType: 'login_failed',
+          email,
+          ipAddress: req.ip,
+        }).catch(() => {});
+        if (failure.locked) {
+          await recordSecurityEvent({
+            eventType: 'account_locked',
+            email,
+            ipAddress: req.ip,
+          }).catch(() => {});
+        }
         throw new HttpError(401, 'Invalid email or password', {
           code: 'INVALID_CREDENTIALS',
         });
@@ -111,7 +139,19 @@ export function authRoutes() {
 
         const validCode = await verifyTwoFactorOrBackupCode(user.id, code);
         if (!validCode) {
-          await recordFailedLogin(user.id);
+          const failure = await recordFailedLogin(user.id);
+          await recordSecurityEvent({
+            eventType: 'two_factor_failed',
+            email,
+            ipAddress: req.ip,
+          }).catch(() => {});
+          if (failure.locked) {
+            await recordSecurityEvent({
+              eventType: 'account_locked',
+              email,
+              ipAddress: req.ip,
+            }).catch(() => {});
+          }
           throw new HttpError(401, 'Invalid two-factor code', {
             code: 'INVALID_TWO_FACTOR_CODE',
           });
@@ -156,6 +196,11 @@ export function authRoutes() {
     res.status(202).json({
       message: 'If an account exists for that email, we have sent a link to reset the password.',
     });
+    recordSecurityEvent({
+      eventType: 'password_reset_requested',
+      email: req.body.email,
+      ipAddress: req.ip,
+    }).catch(() => {});
     requestPasswordReset(req.body.email).catch((err) => {
       logger.error('Password reset request failed', { error: err.message });
     });
