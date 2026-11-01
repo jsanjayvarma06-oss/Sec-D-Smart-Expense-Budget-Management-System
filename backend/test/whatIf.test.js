@@ -158,21 +158,22 @@ describe('What-if budget simulator API', () => {
   });
   describe('planned purchase simulations (#47)', () => {
     async function userWithBudget() {
+      const month = new Date().toISOString().slice(0, 7);
       const user = await createUser();
       const cookie = await loginAs(user);
       const { rows } = await query('SELECT id FROM categories WHERE user_id IS NULL LIMIT 1');
       await request(app).post('/api/budgets').set('Cookie', cookie)
-        .send({ month: '2026-10', amount: 10000 }).expect(201);
+        .send({ month, amount: 10000 }).expect(201);
       await request(app).post('/api/expenses').set('Cookie', cookie)
-        .send({ amount: 2500, category_id: rows[0].id, spent_on: '2026-10-10' }).expect(201);
-      return { cookie, categoryId: rows[0].id };
+        .send({ amount: 2500, category_id: rows[0].id, spent_on: month + '-01' }).expect(201);
+      return { cookie, categoryId: rows[0].id, month };
     }
 
     test('returns affordable verdict and post-purchase balance', async () => {
-      const { cookie, categoryId } = await userWithBudget();
+      const { cookie, categoryId, month } = await userWithBudget();
       const response = await request(app).post('/api/what-if/simulate')
         .set('Cookie', cookie)
-        .send({ month: '2026-10', purchaseAmount: 2000, category_id: categoryId })
+        .send({ month, purchaseAmount: 2000, category_id: categoryId })
         .expect(200);
       assert.equal(response.body.simulation.affordable, true);
       assert.equal(response.body.simulation.remaining_before_purchase, 7500);
@@ -194,7 +195,7 @@ describe('What-if budget simulator API', () => {
     test('does not create an expense or alter the saved budget', async () => {
       const { cookie, categoryId } = await userWithBudget();
       const before = await query('SELECT count(*)::int AS count FROM expenses');
-      const budgetBefore = await request(app).get('/api/budgets/remaining?month=2026-10')
+      const budgetBefore = await request(app).get('/api/budgets/remaining?month=' + month)
         .set('Cookie', cookie).expect(200);
       await request(app).post('/api/what-if/simulate').set('Cookie', cookie)
         .send({ month: '2026-10', purchaseAmount: 2000, category_id: categoryId }).expect(200);
