@@ -82,12 +82,11 @@ describe('NFR04 calculations against 100 transactions', () => {
           source: t.category,
           received_on: t.date,
         });
-        
         if (response.status !== 201) {
           throw new Error(
             `Income record rejected: ${JSON.stringify(t)}. API response: ${JSON.stringify(response.body)}`
           );
-        } 
+        }
       } else {
         await addExpense(user, { amount: t.amount, category: t.category, spent_on: t.date });
       }
