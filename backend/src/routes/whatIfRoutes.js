@@ -4,7 +4,7 @@ import { simulateBudget, simulatePurchase } from '../services/whatIfService.js';
 import { HttpError } from '../utils/httpError.js';
 
 const monthSchema = z.string()
-  .regex(/^\\d{4}-\\d{2}$/)
+  .regex(/^\d{4}-\d{2}$/)
   .refine((value) => {
     const [year, month] = value.split('-').map(Number);
     return year >= 1900 && month >= 1 && month <= 12;
