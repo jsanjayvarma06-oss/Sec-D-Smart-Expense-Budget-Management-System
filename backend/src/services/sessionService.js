@@ -43,6 +43,7 @@ export async function findSession(token) {
      FROM users u
      WHERE s.token_hash = $1
        AND u.id = s.user_id
+       AND u.disabled_at IS NULL
        AND s.expires_at > now()
        AND s.last_seen_at > now() - make_interval(mins => $2)
      RETURNING u.id, u.name, u.email, u.role,
@@ -53,6 +54,16 @@ export async function findSession(token) {
     await query(`DELETE FROM sessions WHERE token_hash = $1`, [tokenHash]);
     return null;
   }
+  // Keep a durable activity timestamp for weekly-active-user aggregates.
+  // Throttle writes to at most once per minute per account.
+  await query(
+    `UPDATE users
+     SET last_active_at = now()
+     WHERE id = $1
+       AND (last_active_at IS NULL OR last_active_at < now() - INTERVAL '1 minute')`,
+    [rows[0].id],
+  );
+
   // The role is read on every request, so a change takes effect immediately.
   const { id, name, email, role, two_factor_enabled: twoFactorEnabled } = rows[0];
   return { id, name, email, role, two_factor_enabled: twoFactorEnabled };

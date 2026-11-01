@@ -15,8 +15,15 @@ import {
   registerSchema,
   resetPasswordSchema,
   twoFactorCodeSchema,
+  twoFactorVerifySchema,
 } from '../services/authSchemas.js';
-import { confirmTwoFactorSetup, startTwoFactorSetup } from '../services/twoFactorService.js';
+import {
+  confirmTwoFactorSetup,
+  disableTwoFactor,
+  regenerateBackupCodes,
+  startTwoFactorSetup,
+  verifyTwoFactorOrBackupCode,
+} from '../services/twoFactorService.js';
 import { requestPasswordReset, resetPassword } from '../services/passwordResetService.js';
 import { query } from '../db/pool.js';
 import { HttpError } from '../utils/httpError.js';
@@ -52,10 +59,10 @@ export function authRoutes() {
   // Log in using an email and password.
   router.post('/login', validate(loginSchema), async (req, res, next) => {
     try {
-      const { email, password } = req.body;
+      const { email, password, code } = req.body;
 
       const { rows } = await query(
-        `SELECT id, name, email, password_hash, locked_until
+        `SELECT id, name, email, password_hash, locked_until, disabled_at, two_factor_enabled_at
          FROM users
          WHERE lower(email) = $1`,
         [email],
@@ -72,6 +79,12 @@ export function authRoutes() {
         });
       }
 
+      if (user.disabled_at) {
+        throw new HttpError(403, 'This account has been disabled. Please contact an administrator.', {
+          code: 'ACCOUNT_DISABLED',
+        });
+      }
+
       if (isLocked(user)) {
         throw new HttpError(429, 'Too many failed attempts. Please try again later.', {
           code: 'ACCOUNT_LOCKED',
@@ -85,6 +98,24 @@ export function authRoutes() {
         throw new HttpError(401, 'Invalid email or password', {
           code: 'INVALID_CREDENTIALS',
         });
+      }
+
+      // If two-factor login is enabled, verify the code before creating any session (#105).
+      if (user.two_factor_enabled_at) {
+        if (!code) {
+          return res.json({
+            two_factor_required: true,
+            email: user.email,
+          });
+        }
+
+        const validCode = await verifyTwoFactorOrBackupCode(user.id, code);
+        if (!validCode) {
+          await recordFailedLogin(user.id);
+          throw new HttpError(401, 'Invalid two-factor code', {
+            code: 'INVALID_TWO_FACTOR_CODE',
+          });
+        }
       }
 
       await resetFailedLogins(user.id);
@@ -169,18 +200,58 @@ export function authRoutes() {
   router.post('/two-factor/confirm', validate(twoFactorCodeSchema), async (req, res, next) => {
     try {
       const result = await confirmTwoFactorSetup(req.user.id, req.body.code);
+      const status = result?.status || String(result);
+      if (status === 'invalid_code') {
+        throw new HttpError(400, 'That code is not right. Check the time on your phone and try the newest code.', {
+          code: 'INVALID_TWO_FACTOR_CODE',
+        });
+      }
+      if (status === 'no_setup') {
+        throw new HttpError(400, 'Start two-factor setup first', { code: 'TWO_FACTOR_NOT_STARTED' });
+      }
+      if (status === 'already_enabled') {
+        throw new HttpError(409, 'Two-factor login is already on', { code: 'TWO_FACTOR_ALREADY_ON' });
+      }
+      res.json({
+        user: { ...req.user, two_factor_enabled: true },
+        backup_codes: result.backup_codes || [],
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Two-factor disable: requires a valid code to turn off (#106).
+  router.post('/two-factor/disable', validate(twoFactorVerifySchema), async (req, res, next) => {
+    try {
+      const result = await disableTwoFactor(req.user.id, req.body.code);
       if (result === 'invalid_code') {
         throw new HttpError(400, 'That code is not right. Check the time on your phone and try the newest code.', {
           code: 'INVALID_TWO_FACTOR_CODE',
         });
       }
-      if (result === 'no_setup') {
-        throw new HttpError(400, 'Start two-factor setup first', { code: 'TWO_FACTOR_NOT_STARTED' });
+      if (result === 'not_enabled') {
+        throw new HttpError(400, 'Two-factor authentication is not enabled', { code: 'TWO_FACTOR_NOT_ENABLED' });
       }
-      if (result === 'already_enabled') {
-        throw new HttpError(409, 'Two-factor login is already on', { code: 'TWO_FACTOR_ALREADY_ON' });
+      res.json({
+        message: 'Two-factor authentication disabled',
+        user: { ...req.user, two_factor_enabled: false },
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Regenerate 10 backup codes: requires a valid code (#106).
+  router.post('/two-factor/backup-codes/regenerate', validate(twoFactorVerifySchema), async (req, res, next) => {
+    try {
+      const backupCodes = await regenerateBackupCodes(req.user.id, req.body.code);
+      if (!backupCodes) {
+        throw new HttpError(400, 'That code is not right. Check the time on your phone and try the newest code.', {
+          code: 'INVALID_TWO_FACTOR_CODE',
+        });
       }
-      res.json({ user: { ...req.user, two_factor_enabled: true } });
+      res.json({ backup_codes: backupCodes });
     } catch (err) {
       next(err);
     }

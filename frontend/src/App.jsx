@@ -4,6 +4,7 @@ import VoiceExpenseButton from './VoiceExpenseButton.jsx';
 import SubscriptionsCard from './SubscriptionsCard.jsx';
 import AdminPanel from './AdminPanel.jsx';
 import TwoFactorSetup from './TwoFactorSetup.jsx';
+import StatementImport from './StatementImport.jsx';
 import { parseSpokenExpense } from './voiceParser.js';
 
 const currentMonth = new Date().toISOString().slice(0, 7);
@@ -109,12 +110,16 @@ function AuthScreen({ onLogin, notice = '' }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState(notice);
 
   function switchMode(nextMode) {
     setMode(nextMode);
+    setTwoFactorRequired(false);
+    setTwoFactorCode('');
     setError('');
     setMessage('');
   }
@@ -142,10 +147,21 @@ function AuthScreen({ onLogin, notice = '' }) {
         setMode('login');
         setPassword('');
       } else {
-        await apiRequest('/api/auth/login', {
+        const payload = {
+          email,
+          password,
+          ...(twoFactorRequired && twoFactorCode ? { code: twoFactorCode.trim() } : {}),
+        };
+        const loginRes = await apiRequest('/api/auth/login', {
           method: 'POST',
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify(payload),
         });
+
+        if (loginRes?.two_factor_required) {
+          setTwoFactorRequired(true);
+          setMessage('Two-factor authentication is required. Enter the 6-digit code from your authenticator app or an 8-character backup code.');
+          return;
+        }
 
         await onLogin();
       }
@@ -162,36 +178,39 @@ function AuthScreen({ onLogin, notice = '' }) {
         <p className="eyebrow">PERSONAL FINANCE</p>
         <h1>Smart Expense &amp; Budget</h1>
         <p className="muted">
-          {mode === 'login' && 'Log in to manage your finances.'}
-          {mode === 'register' && 'Create an account to manage your budget.'}
-          {mode === 'forgot' && "Enter your email and we'll send you a link to reset your password."}
+          {twoFactorRequired && 'Enter your authenticator or backup code to finish signing in.'}
+          {!twoFactorRequired && mode === 'login' && 'Log in to manage your finances.'}
+          {!twoFactorRequired && mode === 'register' && 'Create an account to manage your budget.'}
+          {!twoFactorRequired && mode === 'forgot' && "Enter your email and we'll send you a link to reset your password."}
         </p>
 
-        <div className="auth-tabs">
-          <button
-            type="button"
-            className={mode === 'login' ? 'active' : ''}
-            onClick={() => {
-              setMode('login');
-              setError('');
-              setMessage('');
-            }}
-          >
-            Log in
-          </button>
+        {!twoFactorRequired && (
+          <div className="auth-tabs">
+            <button
+              type="button"
+              className={mode === 'login' ? 'active' : ''}
+              onClick={() => {
+                setMode('login');
+                setError('');
+                setMessage('');
+              }}
+            >
+              Log in
+            </button>
 
-          <button
-            type="button"
-            className={mode === 'register' ? 'active' : ''}
-            onClick={() => {
-              setMode('register');
-              setError('');
-              setMessage('');
-            }}
-          >
-            Register
-          </button>
-        </div>
+            <button
+              type="button"
+              className={mode === 'register' ? 'active' : ''}
+              onClick={() => {
+                setMode('register');
+                setError('');
+                setMessage('');
+              }}
+            >
+              Register
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="auth-form">
           {mode === 'register' && (
@@ -208,32 +227,50 @@ function AuthScreen({ onLogin, notice = '' }) {
             </label>
           )}
 
-          <label>
-            Email
-            <input
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              autoComplete="email"
-              required
-            />
-          </label>
-
-          {mode !== 'forgot' && (
+          {twoFactorRequired ? (
             <label>
-              Password
+              Authentication code or backup code
               <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete={
-                  mode === 'login' ? 'current-password' : 'new-password'
-                }
-                minLength={8}
-                maxLength={72}
+                type="text"
+                value={twoFactorCode}
+                onChange={(event) => setTwoFactorCode(event.target.value)}
+                placeholder="e.g. 123456 or a1b2c3d4"
+                autoComplete="one-time-code"
+                maxLength={10}
                 required
+                autoFocus
               />
             </label>
+          ) : (
+            <>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
+                  required
+                />
+              </label>
+
+              {mode !== 'forgot' && (
+                <label>
+                  Password
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete={
+                      mode === 'login' ? 'current-password' : 'new-password'
+                    }
+                    minLength={8}
+                    maxLength={72}
+                    required
+                  />
+                </label>
+              )}
+            </>
           )}
 
           {error && (
@@ -250,17 +287,33 @@ function AuthScreen({ onLogin, notice = '' }) {
 
           <button type="submit" disabled={busy}>
             {busy && 'Please wait…'}
-            {!busy && mode === 'login' && 'Log in'}
-            {!busy && mode === 'register' && 'Create account'}
-            {!busy && mode === 'forgot' && 'Send reset link'}
+            {!busy && twoFactorRequired && 'Verify & Log in'}
+            {!busy && !twoFactorRequired && mode === 'login' && 'Log in'}
+            {!busy && !twoFactorRequired && mode === 'register' && 'Create account'}
+            {!busy && !twoFactorRequired && mode === 'forgot' && 'Send reset link'}
           </button>
 
-          {mode === 'login' && (
+          {twoFactorRequired && (
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                setTwoFactorRequired(false);
+                setTwoFactorCode('');
+                setError('');
+                setMessage('');
+              }}
+            >
+              Back to password
+            </button>
+          )}
+
+          {!twoFactorRequired && mode === 'login' && (
             <button type="button" className="link-button" onClick={() => switchMode('forgot')}>
               Forgot your password?
             </button>
           )}
-          {mode === 'forgot' && (
+          {!twoFactorRequired && mode === 'forgot' && (
             <button type="button" className="link-button" onClick={() => switchMode('login')}>
               Back to log in
             </button>
@@ -377,6 +430,7 @@ const [expenseHistoryError, setExpenseHistoryError] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [statementImportOpen, setStatementImportOpen] = useState(false);
   const [budgetAmount, setBudgetAmount] = useState('');
   const [budgetSaving, setBudgetSaving] = useState(false);
   const [budgetAlerts, setBudgetAlerts] = useState([]);
@@ -401,6 +455,15 @@ const [expenseHistoryError, setExpenseHistoryError] = useState('');
   const [categoryBudgetSaving, setCategoryBudgetSaving] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [categorySaving, setCategorySaving] = useState(false);
+  const [savingsGoals, setSavingsGoals] = useState([]);
+const [savingsGoalForm, setSavingsGoalForm] = useState({
+  name: '',
+  target_amount: '',
+  saved_amount: '',
+  target_date: '',
+});
+const [editingSavingsGoalId, setEditingSavingsGoalId] = useState(null);
+const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
 
   const refreshData = useCallback(() => {
     setRefreshVersion((version) => version + 1);
@@ -445,9 +508,17 @@ async function handleExportCsv() {
       setError('');
 
       try {
-        const [budgetResult, categoryResult, expenseResult, recurringResult, alertResult, healthResult, forecastResult] =
-          await Promise.all([
-            apiRequest(
+        const [
+          budgetResult,
+          categoryResult,
+          expenseResult,
+          recurringResult,
+          alertResult,
+          healthResult,
+          forecastResult,
+          savingsGoalResult,
+        ] = await Promise.all([
+          apiRequest(
               `/api/budgets/remaining?month=${encodeURIComponent(month)}`,
             ),
             apiRequest('/api/categories'),
@@ -460,6 +531,7 @@ async function handleExportCsv() {
               `/api/financial-health?month=${encodeURIComponent(month)}`,
             ),
             apiRequest('/api/forecast/monthly'),
+            apiRequest('/api/savings-goals'),
           ]);
 
         if (!active) return;
@@ -467,6 +539,7 @@ async function handleExportCsv() {
         setBudgets(budgetResult.remainingBudgets || []);
         setCategories(categoryResult.categories || []);
         setExpenses(expenseResult.expenses || []);
+        setSavingsGoals(savingsGoalResult.savingsGoals || []);
         setRecurringExpenses(recurringResult.recurringExpenses || []);
         setBudgetAlerts(alertResult.alerts || []);
         setFinancialHealth(healthResult.health || null);
@@ -611,16 +684,6 @@ useEffect(() => {
     (total, expense) => total + Number(expense.amount || 0),
     0,
   );
-
-  const sortedExpenses = [...expenses].sort((a, b) => {
-    const dateCompare = String(b.spent_on).localeCompare(String(a.spent_on));
-    if (dateCompare !== 0) return dateCompare;
-
-    return String(b.created_at || '').localeCompare(
-      String(a.created_at || ''),
-    );
-  });
-
   function updateField(event) {
     const { name, value } = event.target;
 
@@ -832,8 +895,101 @@ useEffect(() => {
       setError(err.message || 'Could not review expense.');
     }
   }
-
-
+  function cancelSavingsGoalEditing() {
+    setEditingSavingsGoalId(null);
+    setSavingsGoalForm({
+      name: '',
+      target_amount: '',
+      saved_amount: '',
+      target_date: '',
+    });
+  }
+  function handleEditSavingsGoal(goal) {
+    setEditingSavingsGoalId(goal.id);
+    setSavingsGoalForm({
+      name: goal.name || '',
+      target_amount: String(goal.target_amount ?? ''),
+      saved_amount: String(goal.saved_amount ?? ''),
+      target_date: goal.target_date
+        ? String(goal.target_date).slice(0, 10)
+        : '',
+    });
+  }
+  async function handleSavingsGoalSubmit(event) {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+    const targetAmount = Number(savingsGoalForm.target_amount);
+    const savedAmount = Number(savingsGoalForm.saved_amount || 0);
+    if (!savingsGoalForm.name.trim()) {
+      setError('Please enter a savings goal name.');
+      return;
+    }
+    if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
+      setError('Target amount must be greater than zero.');
+      return;
+    }
+    if (!Number.isFinite(savedAmount) || savedAmount < 0) {
+      setError('Saved amount cannot be negative.');
+      return;
+    }
+    if (savedAmount > targetAmount) {
+      setError('Saved amount cannot be greater than the target amount.');
+      return;
+    }
+    setSavingsGoalSaving(true);
+    const payload = {
+      name: savingsGoalForm.name.trim(),
+      target_amount: targetAmount,
+      saved_amount: savedAmount,
+      target_date: savingsGoalForm.target_date || null,
+    };
+    try {
+      if (editingSavingsGoalId) {
+        await apiRequest(
+          `/api/savings-goals/${encodeURIComponent(editingSavingsGoalId)}`,
+          {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+          },
+        );
+      setMessage('Savings goal updated successfully.');
+      } else {
+        await apiRequest('/api/savings-goals', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+      setMessage('Savings goal created successfully.');
+      }
+      cancelSavingsGoalEditing();
+      refreshData();
+    } catch (err) {
+      setError(err.message || 'Could not save savings goal.');
+    } finally {
+      setSavingsGoalSaving(false);
+    }
+  }
+  async function handleDeleteSavingsGoal(goal) {
+    const confirmed = window.confirm(
+      `Delete the savings goal "${goal.name}"? This cannot be undone.`,
+    );
+    if (!confirmed) return;
+    setError('');
+    setMessage('');
+      try {
+      await apiRequest(
+        `/api/savings-goals/${encodeURIComponent(goal.id)}`,
+        { method: 'DELETE' },
+      );
+    if (editingSavingsGoalId === goal.id) {
+        cancelSavingsGoalEditing();
+      }
+    setMessage('Savings goal deleted successfully.');
+      refreshData();
+    } catch (err) {
+      setError(err.message || 'Could not delete savings goal.');
+    }
+  }
   async function handleBudgetSubmit(event) {
     event.preventDefault();
     setError('');
@@ -845,7 +1001,6 @@ useEffect(() => {
       setError('Budget must be greater than zero.');
       return;
     }
-
     setBudgetSaving(true);
 
     try {
@@ -857,7 +1012,6 @@ useEffect(() => {
           category_id: null,
         }),
       });
-
       setBudgetAmount('');
       setMessage('Monthly budget saved successfully.');
       refreshData();
@@ -867,8 +1021,7 @@ useEffect(() => {
       setBudgetSaving(false);
     }
   }
-
-  async function handleCategoryBudgetSubmit(event) {
+    async function handleCategoryBudgetSubmit(event) {
     event.preventDefault();
     setError('');
     setMessage('');
@@ -896,7 +1049,6 @@ useEffect(() => {
           category_id: categoryBudgetForm.category_id,
         }),
       });
-
       setCategoryBudgetForm({ category_id: '', amount: '' });
       setMessage('Category budget saved successfully.');
       refreshData();
@@ -906,8 +1058,7 @@ useEffect(() => {
       setCategoryBudgetSaving(false);
     }
   }
-
-  async function handleCreateRecurringExpense(event) {
+    async function handleCreateRecurringExpense(event) {
     event.preventDefault();
     setError('');
     setMessage('');
@@ -967,8 +1118,7 @@ useEffect(() => {
       setCategorySaving(false);
     }
   }
-
-  async function handleCategoryDelete(category) {
+    async function handleCategoryDelete(category) {
     setError('');
     setMessage('');
 
@@ -1012,9 +1162,7 @@ useEffect(() => {
     } finally {
       setSubscriptionSaving('');
     }
-  }
-
-  // UC-07: marking the unpaid cycle as paid stops its reminders.
+  }// UC-07: marking the unpaid cycle as paid stops its reminders.
   async function handleMarkRecurringPaid(payment) {
     setError('');
     setMessage('');
@@ -1034,7 +1182,6 @@ useEffect(() => {
       setError(err.message || 'Could not mark the payment as paid.');
     }
   }
-
   async function handleMarkNotificationRead(notification) {
     setError('');
 
@@ -1052,7 +1199,6 @@ useEffect(() => {
       setError(err.message || 'Could not mark notification as read.');
     }
   }
-
   async function handleLogout() {
     setError('');
 
@@ -1277,7 +1423,189 @@ useEffect(() => {
           </div>
         )}
       </section>
+      <section className="budget-alerts savings-goals-section" aria-label="Savings goals">
+  <h2>Savings Goals</h2>
+  <p>Set a savings target, track your progress, and plan your savings.</p>
 
+  <form onSubmit={handleSavingsGoalSubmit} className="expense-form">
+    <label>
+      Goal name
+      <input
+        type="text"
+        maxLength="100"
+        value={savingsGoalForm.name}
+        onChange={(event) =>
+          setSavingsGoalForm((current) => ({
+            ...current,
+            name: event.target.value,
+          }))
+        }
+        placeholder="e.g. Buy a laptop"
+        required
+      />
+    </label>
+
+    <label>
+      Target amount (₹)
+      <input
+        type="number"
+        min="0.01"
+        step="0.01"
+        value={savingsGoalForm.target_amount}
+        onChange={(event) =>
+          setSavingsGoalForm((current) => ({
+            ...current,
+            target_amount: event.target.value,
+          }))
+        }
+        placeholder="Enter target amount"
+        required
+      />
+    </label>
+
+    <label>
+      Already saved (₹)
+      <input
+        type="number"
+        min="0"
+        step="0.01"
+        value={savingsGoalForm.saved_amount}
+        onChange={(event) =>
+          setSavingsGoalForm((current) => ({
+            ...current,
+            saved_amount: event.target.value,
+          }))
+        }
+        placeholder="Enter saved amount"
+      />
+    </label>
+
+    <label>
+      Target date (optional)
+      <input
+        type="date"
+        value={savingsGoalForm.target_date}
+        onChange={(event) =>
+          setSavingsGoalForm((current) => ({
+            ...current,
+            target_date: event.target.value,
+          }))
+        }
+      />
+    </label>
+
+    <div className="savings-goal-form-actions">
+      <button type="submit" disabled={savingsGoalSaving}>
+        {savingsGoalSaving
+          ? 'Saving...'
+          : editingSavingsGoalId
+            ? 'Update goal'
+            : 'Add savings goal'}
+      </button>
+
+      {editingSavingsGoalId && (
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={cancelSavingsGoalEditing}
+        >
+          Cancel
+        </button>
+      )}
+    </div>
+  </form>
+
+  <h3>Your savings goals ({savingsGoals.length})</h3>
+
+  {savingsGoals.length === 0 ? (
+    <p>No savings goals yet. Create your first goal above!</p>
+  ) : (
+    <div className="summary-grid">
+      {savingsGoals.map((goal) => {
+        const target = Number(goal.target_amount) || 0;
+        const saved = Number(goal.saved_amount) || 0;
+        const remaining = Math.max(target - saved, 0);
+        const progress = target > 0
+          ? Math.min(Math.max((saved / target) * 100, 0), 100)
+          : 0;
+
+        return (
+          <article className="summary-card savings-goal-card" key={goal.id}>
+            <h3>{goal.name}</h3>
+
+            <p>
+              Target: <strong>{formatCurrency(target)}</strong>
+            </p>
+
+            <p>
+              Saved: <strong>{formatCurrency(saved)}</strong>
+            </p>
+
+            <p>
+              Remaining: <strong>{formatCurrency(remaining)}</strong>
+            </p>
+
+            <div className="savings-goal-progress-heading">
+              <span>Progress</span>
+              <strong>{progress.toFixed(1)}%</strong>
+            </div>
+
+            <div
+              className="savings-goal-progress-track"
+              role="progressbar"
+              aria-valuenow={Math.round(progress)}
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-label={`${goal.name} progress`}
+            >
+              <div
+                className="savings-goal-progress-fill"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+
+            {goal.target_date && (
+              <p>Target date: {String(goal.target_date).slice(0, 10)}</p>
+            )}
+
+            <p>
+              Status:{' '}
+              <strong>
+                {goal.status === 'completed'
+                  ? 'Completed'
+                  : goal.status === 'archived'
+                    ? 'Archived'
+                    : 'Active'}
+              </strong>
+            </p>
+
+            {goal.estimate_message && (
+              <p>{goal.estimate_message}</p>
+            )}
+
+            <div className="savings-goal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => handleEditSavingsGoal(goal)}
+              >
+                Edit
+              </button>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => handleDeleteSavingsGoal(goal)}
+              >
+                Delete
+              </button>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  )}
+</section>
       <SubscriptionsCard
         subscriptions={subscriptions}
         savingKey={subscriptionSaving}
@@ -1774,26 +2102,37 @@ useEffect(() => {
           </div>
         </form>
       </section>
-    <section className="expense-section">
-  <div className="expense-list-heading">
-    <div>
-      <div className="expense-history-title-row">
-        <h2>Expense history</h2>
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={handleExportCsv}
-        >
-          Export CSV
-        </button>
-      </div>
-      <p className="muted">
-        Search and filter your expenses. Showing 10 records per page.
-      </p>
-    </div>
+      <section className="expense-section">
+        <div className="expense-list-heading">
+          <div>
+            <div className="expense-history-title-row">
+              <h2>Expense history</h2>
+            </div>
+            <p className="muted">
+              Search and filter your expenses. Showing 10 records per page.
+            </p>
+          </div>
 
-    <strong>{monthExpenses.length} this month</strong>
-  </div>
+          <div className="expense-list-heading-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setStatementImportOpen(true)}
+            >
+              Import Bank Statement (CSV)
+            </button>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleExportCsv}
+            >
+              Export CSV
+            </button>
+
+            <strong>{monthExpenses.length} this month</strong>
+          </div>
+        </div>
 
   {/* Search and filters */}
   <div className="expense-history-filters">
@@ -2043,13 +2382,25 @@ useEffect(() => {
               Next
             </button>
           </div>
-        </div>
-      )}
-    </>
-  )}
-</section>
-<TwoFactorSetup user={user} apiRequest={apiRequest} onEnabled={onUserChanged} />
+          </div>
+        )}
+      </>
+    )}
+  </section>
 
+      {statementImportOpen && (
+        <StatementImport
+          apiRequest={apiRequest}
+          categories={categories}
+          onImportSuccess={(count) => {
+            setMessage(`Successfully imported ${count} expense${count === 1 ? '' : 's'} from statement.`);
+            refreshData();
+          }}
+          onClose={() => setStatementImportOpen(false)}
+        />
+      )}
+
+      <TwoFactorSetup user={user} apiRequest={apiRequest} onEnabled={onUserChanged} />
       <footer className="dashboard-footer">
         <p className="muted">Signed in as {user.email}.</p>
         <button

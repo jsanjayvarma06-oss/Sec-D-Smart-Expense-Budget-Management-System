@@ -122,7 +122,7 @@ describe('Integration', () => {
       `suggested ${suggested} (total ${money(rec.total_recommended_budget)}) against a monthly income of ${money(15000)}; the API reports monthly income as ${money(rec.total_monthly_income)}`,
     );
     return `Suggested ${suggested}; total ${money(rec.total_recommended_budget)} ≤ monthly income ${money(15000)}.`;
-  }, { gap: 'Recommendations treat 3 months of income as one month (reports ₹45,000 for a ₹15,000 salary), and the last category is padded to use up the whole limit (#45).' });
+  });
 
   async function recurringDue(user, dueOffset) {
     return (await api(user).post('/api/recurring-expenses', {
