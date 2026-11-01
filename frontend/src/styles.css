@@ -1665,3 +1665,124 @@ h3 {
 .what-if-result p {
   margin: 8px 0;
 }
+
+/* Ask questions about money (#96, #98) */
+.ask-money-section {
+  margin-top: 24px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.ask-money-form {
+  margin-top: 14px;
+}
+
+.ask-money-input-wrapper {
+  display: flex;
+  gap: 10px;
+}
+
+.ask-money-input {
+  flex: 1;
+  font-size: 15px;
+  padding: 10px 14px;
+}
+
+.ask-money-submit {
+  min-width: 90px;
+}
+
+.ask-money-suggestions {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ask-money-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ask-money-chip {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  padding: 5px 12px;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ask-money-chip:hover:not(:disabled) {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.ask-money-result {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 8px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.ask-money-result-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.ask-money-result-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: #16a34a;
+  color: #ffffff;
+  border-radius: 4px;
+}
+
+.ask-money-asked-q {
+  font-style: italic;
+  font-size: 13px;
+}
+
+.ask-money-answer-text {
+  font-size: 15px;
+  line-height: 1.5;
+  color: #1e293b;
+  margin: 0;
+  font-weight: 500;
+}
+
+.ask-money-figures {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.figure-pill {
+  font-size: 12px;
+  padding: 4px 10px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  color: #334155;
+}
+
+/* Security Monitor (#117, #119) */
+.security-monitor {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
