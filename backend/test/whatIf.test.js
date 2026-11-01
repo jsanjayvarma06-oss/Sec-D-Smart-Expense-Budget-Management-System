@@ -182,10 +182,10 @@ describe('What-if budget simulator API', () => {
     });
 
     test('returns not-affordable verdict and exact shortfall', async () => {
-      const { cookie, categoryId } = await userWithBudget();
+      const { cookie, categoryId, month } = await userWithBudget();
       const response = await request(app).post('/api/what-if/simulate')
         .set('Cookie', cookie)
-        .send({ month: '2026-10', purchaseAmount: 40000, category_id: categoryId })
+        .send({ month, purchaseAmount: 40000, category_id: categoryId })
         .expect(200);
       assert.equal(response.body.simulation.affordable, false);
       assert.equal(response.body.simulation.remaining_budget, -32500);
@@ -193,14 +193,14 @@ describe('What-if budget simulator API', () => {
     });
 
     test('does not create an expense or alter the saved budget', async () => {
-      const { cookie, categoryId } = await userWithBudget();
+      const { cookie, categoryId, month } = await userWithBudget();
       const before = await query('SELECT count(*)::int AS count FROM expenses');
       const budgetBefore = await request(app).get('/api/budgets/remaining?month=' + month)
         .set('Cookie', cookie).expect(200);
       await request(app).post('/api/what-if/simulate').set('Cookie', cookie)
-        .send({ month: '2026-10', purchaseAmount: 2000, category_id: categoryId }).expect(200);
+        .send({ month, purchaseAmount: 2000, category_id: categoryId }).expect(200);
       const after = await query('SELECT count(*)::int AS count FROM expenses');
-      const budgetAfter = await request(app).get('/api/budgets/remaining?month=2026-10')
+      const budgetAfter = await request(app).get('/api/budgets/remaining?month=' + month)
         .set('Cookie', cookie).expect(200);
       assert.equal(after.rows[0].count, before.rows[0].count);
       assert.deepEqual(budgetAfter.body.remainingBudgets, budgetBefore.body.remainingBudgets);
