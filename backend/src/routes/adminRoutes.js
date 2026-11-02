@@ -95,7 +95,7 @@ export function adminRoutes() {
         action: 'logout_user_all',
         targetUserId: req.params.id,
       });
-      res.json({ message: 'User logged out everywhere', ...result });
+      res.json({ message: 'User logged out everywhere', logged_out: true, ...result });
     } catch (err) {
       next(err);
     }
@@ -172,7 +172,8 @@ export function adminRoutes() {
       const { admin_id: adminId, action, from, to } = parsed.data;
       const log = await listAdminActions({ adminId, action, from, to });
       await recordAdminAction({ adminId: req.user.id, action: 'view_audit_log', details: parsed.data });
-      res.json(log);
+      // `logs` alias expected by tests alongside original shape
+      res.json({ logs: log.entries, ...log });
     } catch (err) {
       next(err);
     }

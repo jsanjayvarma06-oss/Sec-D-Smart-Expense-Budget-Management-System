@@ -128,16 +128,28 @@ export async function getSecurityOverview() {
      LIMIT 10`,
   );
 
+  const topAccounts = topAccountsResult.rows.map((row) => ({
+    email: row.email,
+    failed_count: row.failed_count,
+    last_event_at: row.last_event_at,
+    user_id: row.user_id,
+    is_locked: row.is_locked,
+    is_disabled: row.is_disabled,
+  }));
+
+  // summary and daily_events expected by tests and the security monitor UI
+  const summary = {
+    total_events: totals.total_events,
+    by_type: { ...totals },
+    top_targeted_accounts: topAccounts,
+  };
+
   return {
+    summary,
+    daily_events: days.map((day) => dailyCountsByDate[day]),
+    // backward-compat aliases
     timeline: days.map((day) => dailyCountsByDate[day]),
     totals,
-    top_targeted_accounts: topAccountsResult.rows.map((row) => ({
-      email: row.email,
-      failed_count: row.failed_count,
-      last_event_at: row.last_event_at,
-      user_id: row.user_id,
-      is_locked: row.is_locked,
-      is_disabled: row.is_disabled,
-    })),
+    top_targeted_accounts: topAccounts,
   };
 }

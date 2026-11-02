@@ -57,7 +57,8 @@ export function insightRoutes() {
       const { question } = parseResult.data;
       const result = await askMoneyQuestion(req.user.id, question);
 
-      res.json(result);
+      // `understood` flag: true when the engine produced a real answer
+      res.json({ ...result, understood: Boolean(result && result.answer) });
     } catch (err) {
       next(err);
     }
