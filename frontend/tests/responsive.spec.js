@@ -1,12 +1,14 @@
 
 import { test, expect } from '@playwright/test';
 
+// Responsive viewport configurations.
 const viewports = [
   { name: 'Desktop', width: 1440, height: 900 },
   { name: 'Tablet', width: 768, height: 1024 },
   { name: 'Mobile', width: 375, height: 812 }
 ];
 
+// Sample expense used for mocked API responses.
 const sampleExpense = {
   id: 'expense-test-1',
   amount: 650,
@@ -18,6 +20,8 @@ const sampleExpense = {
   is_flagged: false
 };
 
+// Mock dashboard API responses to keep tests independent
+// of the backend and database.
 async function mockDashboardApi(page) {
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
@@ -91,7 +95,7 @@ async function mockDashboardApi(page) {
       }
     }
 
-    // Empty successful responses for other dashboard APIs.
+    // Return an empty successful response for other dashboard APIs.
     return route.fulfill({
       status: 200,
       json: {}
@@ -99,41 +103,13 @@ async function mockDashboardApi(page) {
   });
 }
 
-// Logs elements extending beyond the mobile viewport.
-async function logMobileOverflow(page) {
-  const overflowElements = await page.locator('body *').evaluateAll(
-    (elements) =>
-      elements
-        .map((element) => {
-          const rect = element.getBoundingClientRect();
-
-          return {
-            tag: element.tagName,
-            className:
-              typeof element.className === 'string'
-                ? element.className
-                : '',
-            text: element.innerText?.slice(0, 60) || '',
-            left: Math.round(rect.left),
-            right: Math.round(rect.right),
-            width: Math.round(rect.width),
-            scrollWidth: element.scrollWidth,
-            clientWidth: element.clientWidth
-          };
-        })
-        .filter(
-          (element) => element.right > 375 || element.left < 0
-        )
-  );
-
-  console.log('MOBILE OVERFLOW ELEMENTS:', overflowElements);
-}
-
+// Mock APIs before each test.
 test.beforeEach(async ({ page }) => {
   await mockDashboardApi(page);
 });
 
-// RWD_01, RWD_02 and RWD_03: Desktop, tablet and mobile layouts.
+// RWD_01, RWD_02 and RWD_03:
+// Verify desktop, tablet and mobile layouts.
 for (const viewport of viewports) {
   test(`${viewport.name}: application loads without horizontal overflow`, async ({ page }) => {
     await page.setViewportSize({
@@ -143,14 +119,12 @@ for (const viewport of viewports) {
 
     await page.goto('/');
 
+    // Verify that the expense history page loads.
     await expect(
       page.getByRole('heading', { name: 'Expense history' })
     ).toBeVisible();
 
-    if (viewport.name === 'Mobile') {
-      await logMobileOverflow(page);
-    }
-
+    // Verify that the document does not overflow horizontally.
     const pageWidth = await page.evaluate(
       () => document.documentElement.scrollWidth
     );
@@ -159,7 +133,8 @@ for (const viewport of viewports) {
   });
 }
 
-// RWD_04: Search, filters and export controls on mobile.
+// RWD_04:
+// Verify mobile search, filters and export functionality.
 test('RWD_04: mobile expense search, filters and exports are usable', async ({ page }) => {
   await page.setViewportSize({
     width: 375,
@@ -170,6 +145,7 @@ test('RWD_04: mobile expense search, filters and exports are usable', async ({ p
 
   const filters = page.locator('.expense-history-filters');
 
+  // Verify that all filter controls are visible.
   await expect(
     filters.getByLabel('Search expenses')
   ).toBeVisible();
@@ -190,35 +166,44 @@ test('RWD_04: mobile expense search, filters and exports are usable', async ({ p
     filters.getByRole('button', { name: 'Clear filters' })
   ).toBeVisible();
 
-  // Check that the search field accepts input.
+  // Verify that the search field accepts input.
   const searchInput = filters.getByLabel('Search expenses');
 
   await searchInput.fill('Supermarket');
+
   await expect(searchInput).toHaveValue('Supermarket');
 
-  // Check that the category filter can be changed.
-  await filters.getByLabel('Category').selectOption('category-food');
+  // Verify that the category filter can be changed.
+  await filters
+    .getByLabel('Category')
+    .selectOption('category-food');
 
-  // Check CSV export download.
+  // Verify CSV export functionality.
   const csvDownloadPromise = page.waitForEvent('download');
 
-  await page.getByRole('button', { name: /export csv/i }).click();
+  await page
+    .getByRole('button', { name: /export csv/i })
+    .click();
 
   const csvDownload = await csvDownloadPromise;
 
   expect(csvDownload.suggestedFilename()).toContain('.csv');
 
-  // Check PDF export download.
+  // Verify PDF export functionality.
   const pdfDownloadPromise = page.waitForEvent('download');
 
-  await page.getByRole('button', { name: /export pdf/i }).click();
+  await page
+    .getByRole('button', { name: /export pdf/i })
+    .click();
 
   const pdfDownload = await pdfDownloadPromise;
 
   expect(pdfDownload.suggestedFilename()).toContain('.pdf');
 });
 
-// RWD_05: Expense table should scroll inside its wrapper on mobile.
+// RWD_05:
+// Verify that the expense table is contained inside
+// its horizontal scrolling wrapper on mobile.
 test('RWD_05: expense table is contained in its horizontal scroll wrapper on mobile', async ({ page }) => {
   await page.setViewportSize({
     width: 375,
@@ -230,9 +215,11 @@ test('RWD_05: expense table is contained in its horizontal scroll wrapper on mob
   const wrapper = page.locator('.expense-table-wrapper');
   const table = page.locator('.expense-table');
 
+  // Verify that the wrapper and table are visible.
   await expect(wrapper).toBeVisible();
   await expect(table).toBeVisible();
 
+  // Check horizontal scrolling behavior.
   const dimensions = await wrapper.evaluate((element) => ({
     clientWidth: element.clientWidth,
     scrollWidth: element.scrollWidth,
@@ -241,44 +228,13 @@ test('RWD_05: expense table is contained in its horizontal scroll wrapper on mob
 
   expect(['auto', 'scroll']).toContain(dimensions.overflowX);
 
+  // The wrapper should contain the table, even when the table
+  // requires more horizontal space than the mobile viewport.
   expect(dimensions.scrollWidth).toBeGreaterThanOrEqual(
     dimensions.clientWidth
   );
 
-  // Diagnose any elements extending beyond the mobile viewport.
-  async function logMobileOverflow(page) {
-    const overflowElements = await page.locator('body *').evaluateAll(
-      (elements) =>
-        elements
-          .map((element) => {
-            const rect = element.getBoundingClientRect();
-
-            return {
-              tag: element.tagName,
-              className:
-                typeof element.className === 'string'
-                  ? element.className
-                  : '',
-              parentClass:
-                typeof element.parentElement?.className === 'string'
-                  ? element.parentElement.className
-                  : '',
-              text: element.innerText?.slice(0, 60) || '',
-              left: Math.round(rect.left),
-              right: Math.round(rect.right),
-              width: Math.round(rect.width),
-              scrollWidth: element.scrollWidth,
-              clientWidth: element.clientWidth
-            };
-          })
-          .filter(
-            (element) => element.right > 375 || element.left < 0
-          )
-    );
-
-    console.log('MOBILE OVERFLOW ELEMENTS:', overflowElements);
-  }
-
+  // Verify that the overall page does not overflow horizontally.
   const pageWidth = await page.evaluate(
     () => document.documentElement.scrollWidth
   );
