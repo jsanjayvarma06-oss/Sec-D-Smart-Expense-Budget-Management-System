@@ -669,14 +669,42 @@ h3 {
   font-weight: 600;
 }
 
+/* Responsive Admin Panel */
 @media (max-width: 640px) {
   .admin-layout {
     grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
   }
 
   .admin-nav {
+    display: flex;
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 8px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-nav button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  .admin-section {
+    min-width: 0;
+    padding: 14px;
+  }
+
+  .admin-section h2 {
+    overflow-wrap: anywhere;
+  }
+
+  .admin-section > * {
+    max-width: 100%;
   }
 }
 
@@ -1633,6 +1661,74 @@ h3 {
   background: #fffbeb;
   border-color: #fde68a;
   color: #92400e;
+}
+
+/* Sprint 2 - Announcements (#132) */
+
+.announcement-compose {
+  margin-top: 20px;
+}
+
+.announcement-title-field,
+.announcement-message-field {
+  grid-column: 1 / -1;
+}
+
+.announcement-message-field textarea {
+  width: 100%;
+  min-height: 110px;
+  padding: 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font: inherit;
+  resize: vertical;
+}
+
+.announcement-counter {
+  display: block;
+  margin-top: 5px;
+  text-align: right;
+  font-size: 12px;
+}
+
+.announcement-history {
+  margin-top: 28px;
+}
+
+.announcement-history-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.announcement-history-message {
+  margin: 6px 0 0;
+  color: #667085;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.announcement-table td {
+  overflow-wrap: anywhere;
+}
+
+.success-message {
+  margin-top: 14px;
+  color: #067647;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .announcement-history-heading {
+    align-items: flex-start;
+  }
+
+  .announcement-table {
+    min-width: 600px;
+  }
 }
 
 /* Planned purchase simulator (#47) */

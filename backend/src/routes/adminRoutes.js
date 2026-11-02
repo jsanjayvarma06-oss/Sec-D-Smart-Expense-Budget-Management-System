@@ -1,4 +1,8 @@
 import { Router } from 'express';
+import {
+  listAnnouncements,
+  sendAnnouncement,
+} from '../services/announcementService.js';
 import { z } from 'zod';
 import { validate } from '../middleware/validate.js';
 import { validateIdParam } from '../middleware/validateIdParam.js';
@@ -35,13 +39,53 @@ const auditLogQuerySchema = z.object({
   ({ from, to }) => !from || !to || new Date(from) < new Date(to),
   { message: 'The start date must be before the end date', path: ['from'] },
 );
+const announcementSchema = z.object({
+  title: z.string().trim().min(1, 'Title is required').max(100),
+  message: z.string().trim().min(1, 'Message is required').max(255),
+});
 
 // Every route here sits behind requireAdmin (see app.js), and every route
 // records what the admin did in the audit log before it answers (#123), views
 // included, so the log shows who looked at what.
 export function adminRoutes() {
   const router = Router();
+  // Announcements (#131): send a message to all active users.
+  router.post(
+    '/announcements',
+    validate(announcementSchema),
+    async (req, res, next) => {
+      try {
+        const announcement = await sendAnnouncement({
+          adminId: req.user.id,
+          title: req.body.title,
+          message: req.body.message,
+        });
 
+        res.status(201).json({
+          message: 'Announcement sent successfully',
+          announcement,
+        });
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
+
+  // Show the latest announcements sent by administrators.
+  router.get('/announcements', async (req, res, next) => {
+    try {
+      const announcements = await listAnnouncements();
+
+      await recordAdminAction({
+        adminId: req.user.id,
+        action: 'view_announcements',
+      });
+
+      res.json({ announcements });
+    } catch (err) {
+      next(err);
+    }
+  });
   // Account counts for the admin home screen.
   router.get('/overview', async (req, res, next) => {
     try {

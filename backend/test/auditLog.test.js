@@ -98,6 +98,21 @@ describe('Audit log table (#123)', () => {
 const ADMIN_ROUTE_CALLS = {
   'GET /overview': { action: 'view_overview', call: (cookie) => request(app).get('/api/admin/overview').set('Cookie', cookie) },
   'GET /users': { action: 'view_users', call: (cookie) => request(app).get('/api/admin/users').set('Cookie', cookie) },
+'GET /announcements': {
+  action: 'view_announcements',
+  call: (cookie) => request(app).get('/api/admin/announcements').set('Cookie', cookie),
+},
+'POST /announcements': {
+  action: 'send_announcement',
+  status: 201,
+  call: (cookie) => request(app)
+    .post('/api/admin/announcements')
+    .set('Cookie', cookie)
+    .send({
+      title: 'Audit probe announcement',
+      message: 'This is a test announcement',
+    }),
+},
   'POST /users/:id/unlock': {
     action: 'unlock_user',
     call: async (cookie) => request(app)
@@ -181,9 +196,12 @@ describe('recordAdminAction is used by every admin route (#123)', () => {
     assert.deepEqual(routes.sort(), Object.keys(ADMIN_ROUTE_CALLS).sort());
   });
 
-  afterEach(() => query(
+  afterEach(async () => {
+  await query('DELETE FROM announcements');
+  await query(
     `DELETE FROM categories WHERE user_id IS NULL AND name LIKE 'Audit probe%'`,
-  ));
+  );
+});
 
   for (const [route, { action, call, status = 200 }] of Object.entries(ADMIN_ROUTE_CALLS)) {
     test(`${route} records "${action}"`, async () => {
@@ -216,7 +234,7 @@ function auditLog(cookie, filters = {}) {
 }
 
 describe('GET /api/admin/audit-log (#124)', () => {
-  test('lists entries newest first with the admin and the account they acted on', async () => {
+  test('returns audit log entries with admin and target details', async () => {
     const admin = await createAdmin();
     const target = await createUser('target@test.com', 'Target Person');
     await addEntry(admin.id, 'unlock_account', '2026-10-01T10:00:00Z', target.id);

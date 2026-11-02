@@ -1,4 +1,6 @@
+
 import { withUser } from '../db/userScope.js';
+import { getRemainingBudget } from './budgetService.js';
 
 export async function getMonthlyExpenseReport(userId, month) {
   return withUser(userId, async (db) => {
@@ -20,4 +22,13 @@ export async function getMonthlyExpenseReport(userId, month) {
 
     return rows;
   });
+}
+
+export async function getMonthlyReportData(userId, month) {
+  const [expenses, remainingBudgets] = await Promise.all([
+    getMonthlyExpenseReport(userId, month),
+    getRemainingBudget(userId, month),
+  ]);
+
+  return { expenses, remainingBudgets };
 }
