@@ -24,7 +24,6 @@ const emptyExpense = {
   merchant: '',
   note: '',
 };
-
 const SESSION_EXPIRED_EVENT = 'smart-expense:session-expired';
 
 async function apiRequest(url, options = {}) {
@@ -36,10 +35,8 @@ async function apiRequest(url, options = {}) {
       ...options.headers,
     },
   });
-
-  if (!response.ok) {
+if (!response.ok) {
     const result = await response.json().catch(() => ({}));
-
     // UC-01 alternate flow 9a: when the server says the session has ended
     // (idle timeout, expiry or logout elsewhere), send the user back to login.
     if (response.status === 401 && result.code === 'UNAUTHENTICATED' && url !== '/api/auth/me') {
@@ -54,12 +51,10 @@ async function apiRequest(url, options = {}) {
   if (response.status === 204) return null;
   return response.json();
 }
-
 // FR11: when a saved expense is far above the usual amount for its category,
 // say so and what the usual amount is, so the user can confirm or edit it.
 function unusualSpendingNotice(expense, successMessage) {
   const anomaly = expense?.anomaly;
-
   if (!anomaly?.isUnusual) return successMessage;
 
   return `${successMessage} It is more than 3 times your usual spending in `
@@ -499,6 +494,37 @@ async function handleExportCsv() {
       setError(err.message || 'Could not export CSV report.');
     }
   }
+  async function handleExportPdf() {
+  try {
+    const response = await fetch(
+      `/api/reports/export?month=${encodeURIComponent(month)}&format=pdf`,
+      {
+        credentials: 'include',
+      },
+    );
+
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      throw new Error(result.error || 'Could not export PDF report.');
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `expense-report-${month}.pdf`;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    setError(err.message || 'Could not export PDF report.');
+  }
+}
+
 
   useEffect(() => {
     let active = true;
@@ -2129,6 +2155,13 @@ useEffect(() => {
             >
               Export CSV
             </button>
+            <button
+  type="button"
+  className="secondary-button"
+  onClick={handleExportPdf}
+>
+  Export PDF
+</button>
 
             <strong>{monthExpenses.length} this month</strong>
           </div>

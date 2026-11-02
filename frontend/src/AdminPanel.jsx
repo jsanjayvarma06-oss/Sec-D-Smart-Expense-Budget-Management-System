@@ -4,6 +4,7 @@ import AuditLog from './AuditLog.jsx';
 import SystemHealth from './SystemHealth.jsx';
 import UsageDashboard from './UsageDashboard.jsx';
 import UserManagement from './UserManagement.jsx';
+import Announcements from './Announcements.jsx';
 
 // Admin panel shell (story #109). Admins manage accounts and the system, never
 // personal finances: no section here shows anyone's expenses, income, budgets
@@ -25,6 +26,7 @@ const BUILT = {
   usage: UsageDashboard,
   system: SystemHealth,
   audit: AuditLog,
+  announcements: Announcements,
 };
 
 export default function AdminPanel({ user, apiRequest, onBack }) {
