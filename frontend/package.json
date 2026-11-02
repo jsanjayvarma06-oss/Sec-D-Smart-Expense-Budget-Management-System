@@ -1,3 +1,4 @@
+
 {
   "name": "frontend",
   "version": "0.1.0",
@@ -8,10 +9,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "test": "node --test \"src/**/*.test.js\""
+    "test": "node --test \"src/**/*.test.js\"",
+    "test:e2e": "playwright test --config ../playwright.config.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@playwright/test": "^1.64.1",
     "@vitejs/plugin-react": "^6.1.2",
     "eslint": "^9.39.5",
     "eslint-plugin-react-hooks": "^7.1.1",

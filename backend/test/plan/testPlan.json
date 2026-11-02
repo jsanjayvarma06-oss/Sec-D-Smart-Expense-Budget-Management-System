@@ -54,5 +54,109 @@
   { "id": "ST_03", "module": "End to end", "description": "Full budget cycle from setting a limit to being alerted", "expected": "Remaining budget updates each time and an over-budget alert appears on the last entry" },
   { "id": "ST_04", "module": "End to end", "description": "Check that the health score reacts to a change in habits (FR18)", "expected": "The score drops and a short reason for the change is shown" },
   { "id": "ST_05", "module": "End to end", "description": "Full user journey from registration to export", "expected": "Every step works in order and the exported figures match what the dashboard showed" },
-  { "id": "ST_06", "module": "End to end", "description": "Check that records survive a restart (NFR10)", "expected": "All entries are still present and the totals are unchanged" }
+  { "id": "ST_06", "module": "End to end", "description": "Check that records survive a restart (NFR10)", "expected": "All entries are still present and the totals are unchanged" },
+
+  {
+    "id": "ESP_01",
+    "module": "Expense Search & Pagination",
+    "description": "Search expenses by merchant name",
+    "expected": "Only expenses with a matching merchant are returned."
+  },
+  {
+    "id": "ESP_02",
+    "module": "Expense Search & Pagination",
+    "description": "Search expenses by note",
+    "expected": "Only expenses with a matching note are returned."
+  },
+  {
+    "id": "ESP_03",
+    "module": "Expense Search & Pagination",
+    "description": "Search expenses by category name",
+    "expected": "Only expenses in the matching category are returned."
+  },
+  {
+    "id": "ESP_04",
+    "module": "Expense Search & Pagination",
+    "description": "Combine search, category and date filters",
+    "expected": "Results satisfy all supplied filters."
+  },
+  {
+    "id": "ESP_05",
+    "module": "Expense Search & Pagination",
+    "description": "Retrieve the first page of expenses",
+    "expected": "The requested page size and correct pagination metadata are returned."
+  },
+  {
+    "id": "ESP_06",
+    "module": "Expense Search & Pagination",
+    "description": "Retrieve a subsequent page of expenses",
+    "expected": "Subsequent pages contain no duplicate records from the first page."
+  },
+  {
+    "id": "ESP_07",
+    "module": "Expense Search & Pagination",
+    "description": "Request a page beyond the final page",
+    "expected": "An empty expense list is returned with the correct total-page metadata."
+  },
+  {
+    "id": "ESP_08",
+    "module": "Expense Search & Pagination",
+    "description": "Validate page and limit query parameters",
+    "expected": "Invalid values are rejected with HTTP 400."
+  },
+  {
+    "id": "ESP_09",
+    "module": "Expense Search & Pagination",
+    "description": "Verify expense search user isolation",
+    "expected": "A user receives only their own matching expenses."
+  },
+  {
+    "id": "ESP_10",
+    "module": "Expense Search & Pagination",
+    "description": "Search for a term with no matches",
+    "expected": "An empty result and total count of zero are returned."
+  },
+  {
+    "id": "UT_51",
+    "module": "Export Reports",
+    "description": "Test exporting a monthly report as PDF",
+    "expected": "A valid PDF attachment is returned for the selected month."
+  },
+  {
+    "id": "UT_52",
+    "module": "Export Reports",
+    "description": "Test rejecting an unsupported report format",
+    "expected": "The export request is rejected with HTTP 400."
+  },
+  {
+    "id": "RWD_01",
+    "module": "Responsive UI",
+    "description": "Verify dashboard layout at desktop width (1440px)",
+    "expected": "Dashboard cards, charts and navigation remain visible without horizontal overflow."
+  },
+  {
+    "id": "RWD_02",
+    "module": "Responsive UI",
+    "description": "Verify dashboard layout at tablet width (768px)",
+    "expected": "Dashboard content reflows into the tablet layout and controls remain usable."
+  },
+  {
+    "id": "RWD_03",
+    "module": "Responsive UI",
+    "description": "Verify dashboard layout at mobile width (375px)",
+    "expected": "Navigation and dashboard sections fit the viewport without unintended horizontal scrolling."
+  },
+  {
+    "id": "RWD_04",
+    "module": "Responsive UI",
+    "description": "Verify expense form and list on mobile",
+    "expected": "Form fields, search, filters and pagination remain usable at mobile width."
+  },
+  {
+    "id": "RWD_05",
+    "module": "Responsive UI",
+    "description": "Verify analytics charts on mobile and tablet",
+    "expected": "Charts resize without clipping labels or overlapping adjacent content."
+  }
+
 ]
