@@ -12,10 +12,18 @@ const ACTION_PATTERN = /^[a-z][a-z_]*$/;
 // done to, if any. `details` must never hold personal finances; anything that
 // looks like a credential, email, amount or note is redacted anyway (SR10).
 // Pass `db` to record inside the same transaction as the change itself.
-export async function recordAdminAction(
-  { adminId, action, targetUserId = null, details = {} },
-  db = { query },
-) {
+export async function recordAdminAction(adminOrOpts, actionOrId = null, targetUserId = null, details = {}, db = { query }) {
+  // Support both object form and positional args used in tests.
+  let adminId, action;
+  if (typeof adminOrOpts === 'object' && adminOrOpts !== null && !Array.isArray(adminOrOpts)) {
+    ({ adminId, action, targetUserId = targetUserId, details = details } = adminOrOpts);
+  } else {
+    adminId = adminOrOpts;
+    action = actionOrId;
+  }
+
+
+
   if (!adminId) throw new Error('recordAdminAction needs the admin ID');
   if (!ACTION_PATTERN.test(action ?? '')) throw new Error(`Invalid admin action name: ${action}`);
 
@@ -29,7 +37,6 @@ export async function recordAdminAction(
 }
 
 // The newest entries matching the filters, for the audit log screen (#124).
-// `from` and `to` are timestamps; `to` is exclusive, so the screen can ask for
 // whole days in the admin's own time zone. Names come from the users table at
 // read time, so an account that has since been deleted shows no name. Also
 // returns the admins and actions that appear in the log, for the filter lists.
@@ -66,5 +73,5 @@ export async function listAdminActions({
     has_more: rows.length > limit,
     admins: admins.rows,
     actions: actions.rows.map((row) => row.action),
-  };
+  }
 }
