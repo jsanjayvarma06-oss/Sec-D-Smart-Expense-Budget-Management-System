@@ -8,16 +8,6 @@ import { createUser, loginAs, useTestDatabase } from './helpers.js';
 
 useTestDatabase();
 
-// Clear old announcement history after migration and before the tests begin.
-before(async () => {
-  await query('DELETE FROM announcements');
-});
-
-// Remove announcement history before the next test deletes users.
-afterEach(async () => {
-  await query('DELETE FROM announcements');
-});
-
 const app = createApp();
 
 async function setupAdmin() {

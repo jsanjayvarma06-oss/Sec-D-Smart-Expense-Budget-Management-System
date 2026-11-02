@@ -6,7 +6,7 @@ CREATE TABLE announcements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title VARCHAR(100) NOT NULL,
     message VARCHAR(255) NOT NULL,
-    admin_id UUID NOT NULL REFERENCES users(id),
+    admin_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     recipient_count INTEGER NOT NULL DEFAULT 0
         CHECK (recipient_count >= 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
