@@ -67,10 +67,14 @@ export async function startTwoFactorSetup(userId) {
   if (!rows[0]) return null;
 
   const url = otpauthUrl({ issuer: config.twoFactor.issuer, account: rows[0].email, secret });
+  const secretBase32 = base32Encode(secret).match(/.{1,4}/g).join(' ');
   return {
     qr_code: await QRCode.toDataURL(url, { margin: 1, width: 220 }),
     // For typing into the app when the QR code can't be scanned.
-    manual_key: base32Encode(secret).match(/.{1,4}/g).join(' '),
+    manual_key: secretBase32,
+    // Expose secret (base32) and URI so tests and advanced clients can verify
+    secret: secretBase32.replace(/ /g, ''),
+    uri: url,
   };
 }
 

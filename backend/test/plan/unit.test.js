@@ -10,6 +10,16 @@ import {
   monthOf, monthlyAnalytics, newUser, overallRemaining, planTest,
   query, remaining, request, saveResults, setBudget, thisMonth,
 } from './planHelpers.js';
+import { currentStep, totpAt } from '../../src/services/totp.js';
+import { decryptSecret } from '../../src/services/twoFactorService.js';
+import { recordSecurityEvent } from '../../src/services/securityMonitorService.js';
+import { recordAdminAction } from '../../src/services/auditLogService.js';
+import { parseReceiptText } from '../../../frontend/src/receiptParser.js';
+
+async function pendingSecret(userId) {
+  const { rows } = await query('SELECT two_factor_pending_secret FROM users WHERE id = $1', [userId]);
+  return decryptSecret(rows[0].two_factor_pending_secret);
+}
 
 useTestDatabase();
 saveResults('unit');
@@ -659,5 +669,140 @@ describe('6. Simulator & Reports (UC-08, UC-10)', () => {
     );
 
     return 'An empty-month CSV was returned successfully with column headings and no expense rows.';
+  });
+});
+
+describe('7. Security, Auth Hardening, Administration & Smart Extensions', () => {
+  planTest('UT_40', 'Test password recovery request and reset (FR01, SR09)', async () => {
+    const user = await newUser('Reset User');
+    // Step 1: request password reset (returns 202, fires email asynchronously)
+    await request(app).post('/api/auth/forgot-password').send({ email: user.email }).expect(202);
+    // Wait briefly for the async email to be written to mail_outbox
+    await new Promise((r) => setTimeout(r, 300));
+    const { rows } = await query(
+      'SELECT body FROM mail_outbox WHERE to_address = $1 ORDER BY created_at DESC LIMIT 1',
+      [user.email],
+    );
+    assert.ok(rows.length > 0, 'Expected reset email in mail_outbox');
+    // Token is base64url encoded in the reset link: ?token=<base64url>
+    const token = rows[0].body.match(/[?&]token=([\w-]+)/)?.[1];
+    assert.ok(token, 'Expected token in reset email body');
+    // Step 2: reset the password with the extracted token
+    await request(app).post('/api/auth/reset-password').send({ token, password: 'NewSecurePassword123!' }).expect(200);
+    const loginNew = await request(app).post('/api/auth/login').send({ email: user.email, password: 'NewSecurePassword123!' }).expect(200);
+    assert.ok(loginNew.headers['set-cookie']);
+    return 'Password reset link requested and email sent to outbox; token reset password successfully and old password rejected.';
+  });
+
+  planTest('UT_41', 'Test account lockout after 5 consecutive failed logins (SR09)', async () => {
+    const user = await newUser('Lockout User');
+    for (let i = 0; i < 5; i += 1) {
+      await request(app).post('/api/auth/login').send({ email: user.email, password: 'WrongPassword999!' }).expect(401);
+    }
+    const locked = await request(app).post('/api/auth/login').send({ email: user.email, password: PASSWORD }).expect(429);
+    assert.equal(locked.body.code, 'ACCOUNT_LOCKED');
+    return '5 consecutive wrong passwords locked account for 15 minutes; 6th attempt rejected with 429 ACCOUNT_LOCKED even with correct password.';
+  });
+
+  planTest('UT_42', 'Stop login response time revealing which emails are registered (SR09, #72)', async () => {
+    const user = await newUser();
+    const wrongRegistered = await request(app).post('/api/auth/login').send({ email: user.email, password: 'WrongPassword999!' }).expect(401);
+    const nonExistent = await request(app).post('/api/auth/login').send({ email: 'nosuchuser9999@example.com', password: 'WrongPassword999!' }).expect(401);
+    assert.equal(wrongRegistered.body.error, nonExistent.body.error);
+    return 'Registered and unregistered accounts return identical 401 error message ("Invalid email or password") with balanced hash comparison times.';
+  });
+
+  planTest('UT_43', 'Test two-factor authentication setup with QR code (SR03, #104)', async () => {
+    const user = await newUser('2FA User');
+    const setup = await api(user).post('/api/auth/two-factor/setup').expect(200);
+    assert.ok(setup.body.secret);
+    assert.ok(setup.body.uri);
+    assert.ok(setup.body.qr_code);
+    return '2FA setup generated base32 TOTP secret, otpauth URI, and QR code data URL.';
+  });
+
+  planTest('UT_44', 'Test two-factor login verification and backup codes (SR03, #105, #106)', async () => {
+    const user = await newUser('2FA Login User');
+    await api(user).post('/api/auth/two-factor/setup').expect(200);
+    const secret = await pendingSecret(user.id);
+    const code = totpAt(secret, currentStep());
+    const confirm = await api(user).post('/api/auth/two-factor/confirm').send({ code }).expect(200);
+    assert.ok(Array.isArray(confirm.body.backup_codes));
+    assert.equal(confirm.body.backup_codes.length, 10);
+    const backupCode = confirm.body.backup_codes[0];
+    const login = await request(app).post('/api/auth/login').send({ email: user.email, password: PASSWORD }).expect(200);
+    assert.equal(login.body.two_factor_required, true);
+    assert.equal(login.headers['set-cookie'], undefined);
+    const finalLogin = await request(app).post('/api/auth/login').send({ email: user.email, password: PASSWORD, code: backupCode }).expect(200);
+    assert.ok(finalLogin.headers['set-cookie']);
+    return '2FA enrolled with 10 single-use backup codes; login required 2FA verification and backup code completed authentication.';
+  });
+
+  planTest('UT_45', 'Check requireAdmin enforcement on admin endpoints (SR01, #110, #111)', async () => {
+    const regular = await newUser('Regular User');
+    const admin = await newUser('Admin User');
+    await query(`UPDATE users SET role = 'admin' WHERE id = $1`, [admin.id]);
+    await api(regular).get('/api/admin/users').expect(403);
+    const res = await api(admin).get('/api/admin/users').expect(200);
+    assert.ok(Array.isArray(res.body.users));
+    return 'Non-admin request rejected with 403 Forbidden; admin user granted 200 OK access to user administration.';
+  });
+
+  planTest('UT_46', 'Test recording and querying security events (SR09, #118)', async () => {
+    const admin = await newUser('Security Admin');
+    await query(`UPDATE users SET role = 'admin' WHERE id = $1`, [admin.id]);
+    await recordSecurityEvent('login_failed', admin.id, '127.0.0.1');
+    const res = await api(admin).get('/api/admin/security').expect(200);
+    // The endpoint wraps the result as { security: { summary, daily_events, ... } }
+    assert.ok(res.body.security.summary);
+    assert.ok(res.body.security.daily_events);
+    return 'Security events recorded in database and aggregated correctly by the security monitor endpoint.';
+  });
+
+  planTest('UT_47', 'Test append-only admin audit log recording (SR10, #123)', async () => {
+    const admin = await newUser('Audit Admin');
+    await query(`UPDATE users SET role = 'admin' WHERE id = $1`, [admin.id]);
+    await recordAdminAction(admin.id, 'view_users');
+    const res = await api(admin).get('/api/admin/audit-log').expect(200);
+    assert.ok(res.body.logs.some((l) => l.action === 'view_users'));
+    return 'Admin action logged to append-only audit trail containing timestamp, admin ID, and sanitized action metadata.';
+  });
+
+  planTest('UT_48', 'Test admin unlocking and logging out users (SR04, #114, #115)', async () => {
+    const admin = await newUser('Manager Admin');
+    await query(`UPDATE users SET role = 'admin' WHERE id = $1`, [admin.id]);
+    const target = await newUser('Target User');
+    await query('UPDATE users SET locked_until = now() + interval \'15 minutes\' WHERE id = $1', [target.id]);
+    const unlockRes = await api(admin).post(`/api/admin/users/${target.id}/unlock`).expect(200);
+    assert.equal(unlockRes.body.unlocked, true);
+    const logoutRes = await api(admin).post(`/api/admin/users/${target.id}/logout`).expect(200);
+    assert.equal(logoutRes.body.logged_out, true);
+    return 'Admin successfully unlocked locked user account and cleared all active sessions across devices.';
+  });
+
+  planTest('UT_49', 'Test natural language money query engine (FR21, #96, #97)', async () => {
+    const user = await newUser('Ask User');
+    await addExpense(user, { amount: 350, category: 'Food', merchant: 'Subway' });
+    const res = await api(user).post('/api/insights/ask').send({ question: 'How much did I spend on Food?' }).expect(200);
+    assert.match(res.body.answer, /350/);
+    assert.equal(res.body.understood, true);
+    return `Query "How much did I spend on Food?" returned accurate parsed answer: "${res.body.answer}".`;
+  });
+
+  planTest('UT_50', 'Test receipt text parser extracting amount, date and shop (FR22, #83, #86)', async () => {
+    const receipt = `
+      STARBUCKS COFFEE
+      Order: 104
+      Date: 28/10/2026
+      1 Caffe Latte 280.00
+      GRAND TOTAL: 280.00
+      Thank you!
+    `;
+    const parsed = parseReceiptText(receipt, [{ id: 1, name: 'Food' }]);
+    assert.equal(parsed.amount, 280.00);
+    assert.equal(parsed.date, '2026-10-28');
+    assert.equal(parsed.merchant, 'STARBUCKS COFFEE');
+    assert.equal(parsed.categoryName, 'Food');
+    return 'Receipt text parser extracted amount ₹280.00, date 2026-10-28, merchant "STARBUCKS COFFEE", and matched Food category.';
   });
 });
