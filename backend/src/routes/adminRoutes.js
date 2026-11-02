@@ -79,7 +79,8 @@ export function adminRoutes() {
         action: 'unlock_user',
         targetUserId: user.id,
       });
-      res.json({ message: 'User account unlocked', user });
+      // Return explicit flag for test expectations
+      res.json({ unlocked: true, user, message: 'User account unlocked' });
     } catch (err) {
       next(err);
     }

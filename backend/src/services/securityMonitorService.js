@@ -13,12 +13,17 @@ const ALLOWED_EVENT_TYPES = new Set([
  * Records a security event in the security_events table.
  * Strips any sensitive fields (passwords, tokens, secrets) before saving.
  */
-export async function recordSecurityEvent({
-  eventType,
-  email,
-  ipAddress = null,
-  details = {},
-}) {
+export async function recordSecurityEvent(eventOrOpts, emailOrId, ipAddress = null, details = {}) {
+  // Support both object argument and positional arguments as used in tests.
+  let eventType, email;
+  if (typeof eventOrOpts === 'object' && eventOrOpts !== null && !Array.isArray(eventOrOpts)) {
+    // Object form
+    ({ eventType, email = eventOrOpts.email, ipAddress = eventOrOpts.ipAddress, details = eventOrOpts.details } = eventOrOpts);
+  } else {
+    // Positional: (eventType, emailOrId, ipAddress, details)
+    eventType = eventOrOpts;
+    email = emailOrId;
+  }
   if (!ALLOWED_EVENT_TYPES.has(eventType)) {
     return null;
   }
