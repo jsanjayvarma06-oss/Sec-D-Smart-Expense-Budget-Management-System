@@ -5,6 +5,9 @@ import SubscriptionsCard from './SubscriptionsCard.jsx';
 import AdminPanel from './AdminPanel.jsx';
 import TwoFactorSetup from './TwoFactorSetup.jsx';
 import StatementImport from './StatementImport.jsx';
+import WhatIfSimulator from './WhatIfSimulator.jsx';
+import AskMoney from './AskMoney.jsx';
+import ReceiptScanner from './ReceiptScanner.jsx';
 import { parseSpokenExpense } from './voiceParser.js';
 
 const currentMonth = new Date().toISOString().slice(0, 7);
@@ -419,6 +422,8 @@ const [expenseHistoryError, setExpenseHistoryError] = useState('');
   const [expenseForm, setExpenseForm] = useState(emptyExpense);
   const [suggestedCategoryId, setSuggestedCategoryId] = useState('');
   const [voiceNote, setVoiceNote] = useState({ kind: '', text: '' });
+  const [detectedReceiptFields, setDetectedReceiptFields] = useState({});
+  const [receiptNote, setReceiptNote] = useState({ kind: '', text: '' });
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -716,6 +721,10 @@ useEffect(() => {
     // Choosing a category by hand ends the suggestion; it is the user's now.
     if (name === 'category_id') setSuggestedCategoryId('');
 
+    if (detectedReceiptFields[name]) {
+      setDetectedReceiptFields((prev) => ({ ...prev, [name]: false }));
+    }
+
     setExpenseForm((current) => ({
       ...current,
       [name]: value,
@@ -771,9 +780,59 @@ useEffect(() => {
     setVoiceNote({ kind: 'ok', text: `Heard "${transcript}". Check the details below, then click Add expense.${category ? '' : ' Pick a category.'}` });
   }
 
+  // Receipt scan (stories #83, #84, #85, #86): fill form from OCR text, highlight detected fields for user confirmation
+  function applyReceiptScan(parsed) {
+    const fields = {};
+    const foundSummary = [];
+
+    setExpenseForm((current) => {
+      const updated = { ...current };
+      if (parsed.amount) {
+        updated.amount = String(parsed.amount);
+        fields.amount = true;
+        foundSummary.push(`Amount: ₹${parsed.amount}`);
+      }
+      if (parsed.date) {
+        updated.spent_on = parsed.date;
+        fields.spent_on = true;
+        foundSummary.push(`Date: ${parsed.date}`);
+      }
+      if (parsed.merchant) {
+        updated.merchant = parsed.merchant;
+        fields.merchant = true;
+        foundSummary.push(`Shop: ${parsed.merchant}`);
+      }
+      if (parsed.categoryName) {
+        const cat = categories.find((c) => c.name.toLowerCase() === parsed.categoryName.toLowerCase());
+        if (cat) {
+          updated.category_id = cat.id;
+          fields.category_id = true;
+        }
+      }
+      return updated;
+    });
+
+    setDetectedReceiptFields(fields);
+    setVoiceNote({ kind: '', text: '' });
+
+    if (foundSummary.length === 0) {
+      setReceiptNote({
+        kind: 'warning',
+        text: 'Receipt scanned, but no amount or shop could be recognized. Please enter details manually.',
+      });
+    } else {
+      setReceiptNote({
+        kind: 'ok',
+        text: `Receipt scanned successfully (${foundSummary.join(' · ')}). Confirm the highlighted fields before saving.`,
+      });
+    }
+  }
+
   function startEditing(expense) {
     setEditingId(expense.id);
     setSuggestedCategoryId('');
+    setDetectedReceiptFields({});
+    setReceiptNote({ kind: '', text: '' });
 
     setExpenseForm({
       amount: String(expense.amount),
@@ -791,6 +850,8 @@ useEffect(() => {
   function cancelEditing() {
     setEditingId(null);
     setSuggestedCategoryId('');
+    setDetectedReceiptFields({});
+    setReceiptNote({ kind: '', text: '' });
     setExpenseForm({ ...emptyExpense, spent_on: localToday() });
     setError('');
     setMessage('');
@@ -808,6 +869,7 @@ useEffect(() => {
     setError('');
     setMessage('');
     setVoiceNote({ kind: '', text: '' });
+    setReceiptNote({ kind: '', text: '' });
 
     if (!expenseForm.category_id && !expenseForm.merchant.trim()) {
       setError('Choose a category, or enter a merchant name so one can be suggested.');
@@ -864,6 +926,8 @@ useEffect(() => {
 
       setEditingId(null);
       setSuggestedCategoryId('');
+      setDetectedReceiptFields({});
+      setReceiptNote({ kind: '', text: '' });
       setExpenseForm({ ...emptyExpense, spent_on: localToday() });
       refreshData();
     } catch (err) {
@@ -1690,6 +1754,10 @@ useEffect(() => {
         )}
       </section>
 
+      <WhatIfSimulator apiRequest={apiRequest} month={month} categories={categories} />
+
+      <AskMoney apiRequest={apiRequest} />
+
       <section className="budget-alerts" aria-label="Financial health score">
         <h2>Financial Health Score</h2>
         {financialHealth ? (
@@ -2023,9 +2091,24 @@ useEffect(() => {
             <span className="muted">Try: "Spent 120 on chai at the canteen"</span>
           </div>
         )}
+        {!editingId && (
+          <div className="voice-entry">
+            <ReceiptScanner
+              categories={categories}
+              onReceiptParsed={applyReceiptScan}
+              disabled={categories.length === 0}
+            />
+            <span className="muted">Scan a bill or receipt photo to fill the form</span>
+          </div>
+        )}
         {voiceNote.text && (
           <p className={voiceNote.kind === 'error' ? 'error-message' : 'success-message'} role="status">
             {voiceNote.text}
+          </p>
+        )}
+        {receiptNote.text && (
+          <p className={receiptNote.kind === 'ok' ? 'success-message' : 'warning-message'} role="status">
+            {receiptNote.text}
           </p>
         )}
 
@@ -2042,7 +2125,9 @@ useEffect(() => {
               onChange={updateField}
               placeholder="e.g. 250"
               required
+              className={detectedReceiptFields.amount ? 'receipt-detected-field' : undefined}
             />
+            {detectedReceiptFields.amount && <span className="muted category-hint">Filled from receipt — check before saving.</span>}
           </label>
 
           <label>
@@ -2051,6 +2136,7 @@ useEffect(() => {
               name="category_id"
               value={expenseForm.category_id}
               onChange={updateField}
+              className={detectedReceiptFields.category_id ? 'receipt-detected-field' : undefined}
             >
               <option value="">Select a category</option>
               {categories.map((category) => (
@@ -2065,6 +2151,7 @@ useEffect(() => {
                 Suggested from the merchant name. Change it if it is wrong.
               </span>
             )}
+            {detectedReceiptFields.category_id && <span className="muted category-hint">Filled from receipt — check before saving.</span>}
           </label>
 
           <label>
@@ -2076,7 +2163,9 @@ useEffect(() => {
               max={localToday()}
               onChange={updateField}
               required
+              className={detectedReceiptFields.spent_on ? 'receipt-detected-field' : undefined}
             />
+            {detectedReceiptFields.spent_on && <span className="muted category-hint">Filled from receipt — check before saving.</span>}
           </label>
 
           <label>
@@ -2088,7 +2177,9 @@ useEffect(() => {
               onBlur={suggestCategoryFromMerchant}
               maxLength={100}
               placeholder="e.g. Swiggy"
+              className={detectedReceiptFields.merchant ? 'receipt-detected-field' : undefined}
             />
+            {detectedReceiptFields.merchant && <span className="muted category-hint">Filled from receipt — check before saving.</span>}
           </label>
 
           <label className="expense-note-field">

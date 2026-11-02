@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import AdminCategories from './AdminCategories.jsx';
 import AuditLog from './AuditLog.jsx';
+import SecurityMonitor from './SecurityMonitor.jsx';
 import SystemHealth from './SystemHealth.jsx';
 import UsageDashboard from './UsageDashboard.jsx';
 import UserManagement from './UserManagement.jsx';
@@ -22,6 +23,7 @@ const SECTIONS = [
 
 const BUILT = {
   users: UserManagement,
+  security: SecurityMonitor,
   categories: AdminCategories,
   usage: UsageDashboard,
   system: SystemHealth,

@@ -571,27 +571,32 @@ planTest('UT_27', 'Test creating a recurring expense (FR16)', async () => {
 });
 
 describe('6. Simulator & Reports (UC-08, UC-10)', () => {
-  const purchaseGap = 'The what-if simulator takes a proposed budget and income, not a planned purchase, and gives no affordable/not-affordable verdict (#47, UC-08).';
-
   planTest('UT_29', 'Test simulating an affordable purchase (FR19)', async () => {
     const user = await newUser();
     await setBudget(user, { amount: 10000 });
     await addExpense(user, { amount: 2500, category: 'Food' });
-    const res = await api(user).post('/api/what-if/simulate', { month: thisMonth(), purchaseAmount: 2000, category_id: await categoryId(user, 'Shopping') });
-    assert.equal(res.status, 200, `planned purchase refused: ${res.status} "${res.body.error}"`);
-    assert.equal(res.body.simulation.affordable, true, 'no affordable verdict in the response');
+    const res = await api(user).post('/api/what-if/simulate', {
+      month: thisMonth(), purchaseAmount: 2000, category_id: await categoryId(user, 'Shopping'),
+    }).expect(200);
+    assert.equal(res.body.simulation.affordable, true);
+    assert.equal(res.body.simulation.remaining_before_purchase, 7500);
+    assert.equal(res.body.simulation.remaining_budget, 5500);
+    assert.equal(res.body.simulation.shortfall, 0);
     return `Remaining after purchase ${money(res.body.simulation.remaining_budget)}; affordable.`;
-  }, { gap: purchaseGap });
+  });
 
   planTest('UT_30', 'Test simulating a purchase the user cannot afford', async () => {
     const user = await newUser();
     await setBudget(user, { amount: 10000 });
     await addExpense(user, { amount: 2500, category: 'Food' });
-    const res = await api(user).post('/api/what-if/simulate', { month: thisMonth(), purchaseAmount: 40000, category_id: await categoryId(user, 'Shopping') });
-    assert.equal(res.status, 200, `planned purchase refused: ${res.status} "${res.body.error}"`);
-    assert.equal(res.body.simulation.affordable, false, 'no affordable verdict in the response');
+    const res = await api(user).post('/api/what-if/simulate', {
+      month: thisMonth(), purchaseAmount: 40000, category_id: await categoryId(user, 'Shopping'),
+    }).expect(200);
+    assert.equal(res.body.simulation.affordable, false);
+    assert.equal(res.body.simulation.remaining_budget, -32500);
+    assert.equal(res.body.simulation.shortfall, 32500);
     return `Shortfall ${money(res.body.simulation.shortfall)}; not affordable.`;
-  }, { gap: purchaseGap });
+  });
 
   planTest('UT_31', 'Check that a simulation is not saved as a real expense', async () => {
     const user = await newUser();

@@ -19,6 +19,7 @@ import { getUsageDashboard } from '../services/adminUsageService.js';
 import { listAdminActions, recordAdminAction } from '../services/auditLogService.js';
 import { createCategorySchema, updateCategorySchema } from '../services/categorySchemas.js';
 import { getSystemHealth } from '../services/systemHealthService.js';
+import { getSecurityOverview } from '../services/securityMonitorService.js';
 import {
   disableUser,
   enableUser,
@@ -182,6 +183,17 @@ export function adminRoutes() {
       const health = await getSystemHealth();
       await recordAdminAction({ adminId: req.user.id, action: 'view_system_health' });
       res.json({ health });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Security monitor (#117, #118): 7-day security events and top targeted accounts.
+  router.get('/security', async (req, res, next) => {
+    try {
+      const security = await getSecurityOverview();
+      await recordAdminAction({ adminId: req.user.id, action: 'view_security_monitor' });
+      res.json({ security });
     } catch (err) {
       next(err);
     }
