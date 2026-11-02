@@ -13,12 +13,17 @@ const ALLOWED_EVENT_TYPES = new Set([
  * Records a security event in the security_events table.
  * Strips any sensitive fields (passwords, tokens, secrets) before saving.
  */
-export async function recordSecurityEvent({
-  eventType,
-  email,
-  ipAddress = null,
-  details = {},
-}) {
+export async function recordSecurityEvent(eventOrOpts, emailOrId, ipAddress = null, details = {}) {
+  // Support both object argument and positional arguments as used in tests.
+  let eventType, email;
+  if (typeof eventOrOpts === 'object' && eventOrOpts !== null && !Array.isArray(eventOrOpts)) {
+    // Object form
+    ({ eventType, email = eventOrOpts.email, ipAddress = eventOrOpts.ipAddress, details = eventOrOpts.details } = eventOrOpts);
+  } else {
+    // Positional: (eventType, emailOrId, ipAddress, details)
+    eventType = eventOrOpts;
+    email = emailOrId;
+  }
   if (!ALLOWED_EVENT_TYPES.has(eventType)) {
     return null;
   }
@@ -123,16 +128,28 @@ export async function getSecurityOverview() {
      LIMIT 10`,
   );
 
+  const topAccounts = topAccountsResult.rows.map((row) => ({
+    email: row.email,
+    failed_count: row.failed_count,
+    last_event_at: row.last_event_at,
+    user_id: row.user_id,
+    is_locked: row.is_locked,
+    is_disabled: row.is_disabled,
+  }));
+
+  // summary and daily_events expected by tests and the security monitor UI
+  const summary = {
+    total_events: totals.total_events,
+    by_type: { ...totals },
+    top_targeted_accounts: topAccounts,
+  };
+
   return {
+    summary,
+    daily_events: days.map((day) => dailyCountsByDate[day]),
+    // backward-compat aliases
     timeline: days.map((day) => dailyCountsByDate[day]),
     totals,
-    top_targeted_accounts: topAccountsResult.rows.map((row) => ({
-      email: row.email,
-      failed_count: row.failed_count,
-      last_event_at: row.last_event_at,
-      user_id: row.user_id,
-      is_locked: row.is_locked,
-      is_disabled: row.is_disabled,
-    })),
+    top_targeted_accounts: topAccounts,
   };
 }

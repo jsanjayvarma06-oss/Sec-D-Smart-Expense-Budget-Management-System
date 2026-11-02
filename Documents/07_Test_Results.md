@@ -14,11 +14,11 @@ and are not counted as passing.
 
 | Result | Cases |
 |---|---|
-| Pass | 56 |
+| Pass | 67 |
 | Fail (known gap, tracked on the board) | 0 |
-| Fail | 0 |
+| Fail | 3 |
 | Not run (feature not built) | 0 |
-| **Total** | **56** |
+| **Total** | **70** |
 
 ## Unit tests (UT)
 
@@ -63,6 +63,17 @@ and are not counted as passing.
 | UT_37 | Savings Goals | Test estimate when savings goal is achieved | The goal shows 0 months remaining and a message that the goal has been reached | The fully funded goal correctly shows 0 months remaining and confirms that the savings goal has been reached. | Pass |
 | UT_38 | Savings Goals | Test estimate recalculation after target amount changes | The estimate is recalculated for the new target amount | Increasing the target amount recalculated the estimate from 3 to 4 months. | Pass |
 | UT_39 | Savings Goals | Test estimate recalculation after savings rate changes | The estimate is recalculated for the new average monthly savings | Increasing average monthly savings from ₹6,000 to ₹8,000 recalculated the completion estimate from 3 months to 2 months. | Pass |
+| UT_40 | User Registration & Login | Test password recovery request and reset (FR01, SR09) | A single-use reset link is issued and allows setting a new password, invalidating older sessions | Password reset link requested and email sent to outbox; token reset password successfully and old password rejected. | Pass |
+| UT_41 | User Registration & Login | Test account lockout after 5 consecutive failed logins (SR09) | 5 wrong passwords lock the account for 15 minutes, rejecting further attempts with 429 | 5 consecutive wrong passwords locked account for 15 minutes; 6th attempt rejected with 429 ACCOUNT_LOCKED even with correct password. | Pass |
+| UT_42 | User Registration & Login | Stop login response time revealing which emails are registered (SR09, #72) | Login response duration for existing and non-existing emails is indistinguishable | Registered and unregistered accounts return identical 401 error message ("Invalid email or password") with balanced hash comparison times. | Pass |
+| UT_43 | Two-Factor Authentication | Test two-factor authentication setup with QR code (SR03, #104) | A TOTP secret and QR code URI are generated for authenticator app enrollment | 2FA setup generated base32 TOTP secret, otpauth URI, and QR code data URL. | Pass |
+| UT_44 | Two-Factor Authentication | Test two-factor login verification and backup codes (SR03, #105, #106) | Login requires 2FA code; single-use backup codes grant access and cannot be reused | 2FA enrolled with 10 single-use backup codes; login required 2FA verification and backup code completed authentication. | Pass |
+| UT_45 | Admin Role & Access | Check requireAdmin enforcement on admin endpoints (SR01, #110, #111) | Non-admin users receive 403 on all /api/admin routes; admins are granted access | Non-admin request rejected with 403 Forbidden; admin user granted 200 OK access to user administration. | Pass |
+| UT_46 | Admin Security Monitor | Test recording and querying security events (SR09, #118) | Failed logins and lockouts are logged and summarized in the security events API | Security events recorded in database and aggregated correctly by the security monitor endpoint. | Pass |
+| UT_47 | Admin Audit Log | Test append-only admin audit log recording (SR10, #123) | Admin actions create immutable audit entries with no personal financial data | Admin action logged to append-only audit trail containing timestamp, admin ID, and sanitized action metadata. | Pass |
+| UT_48 | Admin User Management | Test admin unlocking and logging out users (SR04, #114, #115) | Admin can list users, unlock locked accounts, and invalidate sessions without seeing financial data | Admin successfully unlocked locked user account and cleared all active sessions across devices. | Pass |
+| UT_49 | Natural Language Queries | Test natural language money query engine (FR21, #96, #97) | Question about monthly spending returns accurate total and category breakdown | Query "How much did I spend on Food?" returned accurate parsed answer: "You spent ₹350.00 on Food across 1 transaction in November 2026.". | Pass |
+| UT_50 | Receipt Scanning | Test receipt text parser extracting amount, date and shop (FR22, #83, #86) | Receipt OCR text yields total amount, valid date, merchant name, and matched category | Receipt text parser extracted amount ₹280.00, date 2026-10-28, merchant "STARBUCKS COFFEE", and matched Food category. | Pass |
 
 ## Integration tests (IT)
 
@@ -79,6 +90,8 @@ and are not counted as passing.
 | IT_09 | Recurring + Reminder | Check the reminder before a due date (FR17) | A reminder is shown for the upcoming payment | Payment due in 3 days: reminder created, "Payment of 499.00 is due on 2026-11-05." | Pass |
 | IT_10 | Recurring + Reminder | Check that reminders stop once the payment is marked paid | The reminder no longer appears for that cycle | Payment due 2026-11-03 marked paid; checking reminders again created 0. | Pass |
 | IT_11 | Input Validation | Check that unsafe input is rejected (SR05) | The input is rejected or escaped, and nothing is executed when the entry is opened | The note is stored as plain text and returned as JSON. The React UI shows it as text (no raw HTML insertion anywhere), so the script tag is displayed, not run. | Pass |
+| IT_12 | Auth + Security Monitor | Check that failed logins trigger security event and lockout (SR09, #118) | Consecutive failed logins create a lockout and increment security event counts | Not run | Fail |
+| IT_13 | Insights + Isolation | Check that natural language query strictly isolates user data (#97) | User A cannot query or see any totals or transactions belonging to User B | Not run | Fail |
 
 ## System tests (ST)
 
@@ -90,6 +103,7 @@ and are not counted as passing.
 | ST_04 | End to end | Check that the health score reacts to a change in habits (FR18) | The score drops and a short reason for the change is shown | Score 100 (Excellent) → 10 (Needs improvement) after ₹15,000 of extra spending. Reasons: Your expenses equalled or exceeded your income. Spending exceeded your overall budget. | Pass |
 | ST_05 | End to end | Full user journey from registration to export | Every step works in order and the exported figures match what the dashboard showed | Every step worked and the export matched the dashboard. | Pass |
 | ST_06 | End to end | Check that records survive a restart (NFR10) | All entries are still present and the totals are unchanged | 5 expenses (total ₹5,000) saved; the API was killed and restarted; all 5 were still there, the total was unchanged and the user was still logged in. | Pass |
+| ST_07 | End to end | Full journey with password recovery and lockout clearance (UC-01) | Locked account successfully requests reset link, resets password, and logs in with new password | Not run | Fail |
 
 ## Non-functional check: NFR04 calculation accuracy
 
