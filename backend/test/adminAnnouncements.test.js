@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { afterEach, before, describe, test } from 'node:test';
+import { describe, test } from 'node:test';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { query } from '../src/db/pool.js';
