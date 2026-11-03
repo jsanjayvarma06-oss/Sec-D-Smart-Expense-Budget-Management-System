@@ -1935,3 +1935,38 @@ h3 {
   background: #f0f9f4 !important;
   outline: none;
 }
+
+/* Issue #164 - Responsive expense history fixes */
+.expense-table-wrapper {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.expense-list-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 520px) {
+  .expense-list-heading-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .expense-list-heading-actions button {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .expense-list-heading-actions strong {
+    align-self: flex-start;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+}
