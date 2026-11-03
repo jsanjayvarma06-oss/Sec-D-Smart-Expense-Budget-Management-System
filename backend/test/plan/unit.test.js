@@ -657,21 +657,14 @@ describe('6. Simulator & Reports (UC-08, UC-10)', () => {
 
     const res = await api(user)
       .get('/api/reports/export?month=2020-01&format=csv')
-      .expect(200);
+      .expect(204);
 
-    assert.match(res.headers['content-type'], /text\/csv/);
+    assert.equal(res.text, '');
+    assert.equal(res.headers['content-type'], undefined);
 
-    const csv = res.text.replace(/^\uFEFF/, '').trim();
-
-    assert.equal(
-      csv,
-      '"Date","Merchant","Category","Note","Amount"',
-    );
-
-    return 'An empty-month CSV was returned successfully with column headings and no expense rows.';
+    return 'The export returned HTTP 204 with no file because the selected month has no expenses.';
   });
 });
-
 describe('7. Security, Auth Hardening, Administration & Smart Extensions', () => {
   planTest('UT_40', 'Test password recovery request and reset (FR01, SR09)', async () => {
     const user = await newUser('Reset User');

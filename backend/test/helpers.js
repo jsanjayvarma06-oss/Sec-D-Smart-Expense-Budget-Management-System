@@ -12,10 +12,15 @@ if (!databaseName.endsWith('_test')) {
 // users cascades to their sessions and records.
 export function useTestDatabase() {
   before(() => migrate({ log: () => {} }));
-  beforeEach(() => query('DELETE FROM users'));
+
+  beforeEach(async () => {
+    // Remove announcements before deleting their admin users.
+    await query('DELETE FROM announcements');
+    await query('DELETE FROM users');
+  });
+
   after(() => pool.end());
 }
-
 // Inserts a user directly, standing in for registration. The password hash is a
 // placeholder because these tests never check a password.
 export async function createUser(email = 'user1@test.com', name = 'Test User') {

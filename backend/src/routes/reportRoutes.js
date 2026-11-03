@@ -344,7 +344,9 @@ export function reportRoutes() {
           req.user.id,
           month,
         );
-
+        if (expenses.length === 0) {
+          return res.status(204).end();
+        }
         const csv = `\uFEFF${createCsv(expenses)}`;
 
         return res
