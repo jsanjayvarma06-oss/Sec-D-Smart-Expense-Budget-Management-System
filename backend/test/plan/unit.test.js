@@ -572,6 +572,8 @@ planTest('UT_27', 'Test creating a recurring expense (FR16)', async () => {
     }).expect(201);
     const first = await api(user).post('/api/recurring-expenses/generate-due', { today: localDay(0) }).expect(200);
     const second = await api(user).post('/api/recurring-expenses/generate-due', { today: localDay(0) }).expect(200);
+    assert.equal(first.body.generated_count, 1);
+    assert.equal(second.body.generated_count, 0);
     const { rows } = await query(
       'SELECT count(*)::int AS n FROM expenses WHERE user_id = $1 AND recurring_expense_id IS NOT NULL', [user.id],
     );
@@ -613,7 +615,10 @@ describe('6. Simulator & Reports (UC-08, UC-10)', () => {
     await setBudget(user, { amount: 10000 });
     await addExpense(user, { amount: 2500, category: 'Food' });
     const before = await overallRemaining(user);
-    const sim = await api(user).post('/api/what-if/simulate', { month: thisMonth(), proposedBudget: 40000, proposedIncome: 15000 }).expect(200);
+    const sim = await api(user).post('/api/what-if/simulate', {
+      month: thisMonth(), purchaseAmount: 2000, category_id: await categoryId(user, 'Shopping'),
+    }).expect(200);
+    assert.equal(sim.body.simulation.affordable, true);
     const list = (await api(user).get('/api/expenses').expect(200)).body.expenses;
     const after = await overallRemaining(user);
     assert.equal(list.length, 1);
