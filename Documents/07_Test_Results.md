@@ -3,7 +3,7 @@
 Smart Expense & Budget Management System. Results for the 50 cases in
 `04_Test_Plan.pdf`, plus the NFR04 calculation check.
 
-**Run:** 2026-11-02, Node.js v22.23.4, PostgreSQL 17, through the real API
+**Run:** 2026-11-03, Node.js v24.12.0, PostgreSQL 17, through the real API
 (`npm run test:plan -w backend`). Each case is an automated test named after its ID in
 `backend/test/plan/`. The Actual Result column is what that test observed in this run.
 
@@ -14,11 +14,11 @@ and are not counted as passing.
 
 | Result | Cases |
 |---|---|
-| Pass | 56 |
+| Pass | 67 |
 | Fail (known gap, tracked on the board) | 0 |
-| Fail | 0 |
+| Fail | 20 |
 | Not run (feature not built) | 0 |
-| **Total** | **56** |
+| **Total** | **87** |
 
 ## Unit tests (UT)
 
@@ -50,11 +50,11 @@ and are not counted as passing.
 | UT_24 | Savings Goals | Test creating a savings goal (FR14) | The goal is created, appears in the goal list, and shows its progress (25% when ₹2,500 of ₹10,000 is saved) and the remaining amount | Created "Emergency Fund" with target ₹10,000 and saved amount ₹2,500. Progress is 25% and remaining amount is ₹7,500. The goal also appears in the savings-goals list. | Pass |
 | UT_25 | Savings Goals | Test the time-to-goal estimate (FR15) | An estimate in months is shown from the average monthly savings (₹15,000 remaining at ₹6,000 a month shows about 3 months) | Average monthly savings is ₹6,000. With ₹15,000 remaining, the estimated completion time is 3 months. | Pass |
 | UT_26 | Savings Goals | Test the estimate when nothing is being saved | No number is shown, instead a message that the goal cannot be reached at the current rate | The goal has ₹8,000 remaining, but there is no positive savings history. The system correctly displays "Your goal cannot currently be estimated at your existing saving rate." instead of inventing a completion date. | Pass |
-| UT_27 | Recurring Expenses | Test creating a recurring expense (FR16) | The recurring expense is saved and listed with its next due date | Monthly Rent of ₹6,000 saved and listed with next due date 2026-11-02. | Pass |
+| UT_27 | Recurring Expenses | Test creating a recurring expense (FR16) | The recurring expense is saved and listed with its next due date | Monthly Rent of ₹6,000 saved and listed with next due date 2026-11-03. | Pass |
 | UT_28 | Recurring Expenses | Test that a recurring expense is not created twice in one cycle | Exactly one entry is created for the new cycle, not two | First run created 1, a repeat in the same cycle created 0: exactly one entry. | Pass |
 | UT_29 | What-If Simulator | Test simulating an affordable purchase (FR19) | The result shows the budget left after the purchase and marks it as affordable | Remaining after purchase ₹5,500; affordable. | Pass |
 | UT_30 | What-If Simulator | Test simulating a purchase the user cannot afford | The result warns that the purchase goes past the budget and shows the shortfall | Shortfall ₹32,500; not affordable. | Pass |
-| UT_31 | What-If Simulator | Check that a simulation is not saved as a real expense | No new expense appears in the list and the remaining budget is unchanged | Simulation ran (simulated remaining ₹37,500); the expense list still has 1 entry and the real remaining budget stayed ₹7,500. | Pass |
+| UT_31 | What-If Simulator | Check that a simulation is not saved as a real expense | No new expense appears in the list and the remaining budget is unchanged | Simulation ran (simulated remaining ₹5,500); the expense list still has 1 entry and the real remaining budget stayed ₹7,500. | Pass |
 | UT_32 | Export Reports | Test exporting a report (FR20) | A file downloads with figures matching the dashboard for that month | CSV report downloaded successfully for 2026-11, containing the test expense of ₹600 with its merchant, category and note. | Pass |
 | UT_33 | Export Reports | Test exporting a month with no data | The app shows a message that there is nothing to export instead of an empty file | An empty-month CSV was returned successfully with column headings and no expense rows. | Pass |
 | UT_34 | Savings Goals | Test updating an existing savings goal | The goal name and saved amount are updated, and progress and remaining amount are recalculated | Updated the goal name and saved amount. New progress is 50% with ₹5,000 remaining. | Pass |
@@ -63,6 +63,19 @@ and are not counted as passing.
 | UT_37 | Savings Goals | Test estimate when savings goal is achieved | The goal shows 0 months remaining and a message that the goal has been reached | The fully funded goal correctly shows 0 months remaining and confirms that the savings goal has been reached. | Pass |
 | UT_38 | Savings Goals | Test estimate recalculation after target amount changes | The estimate is recalculated for the new target amount | Increasing the target amount recalculated the estimate from 3 to 4 months. | Pass |
 | UT_39 | Savings Goals | Test estimate recalculation after savings rate changes | The estimate is recalculated for the new average monthly savings | Increasing average monthly savings from ₹6,000 to ₹8,000 recalculated the completion estimate from 3 months to 2 months. | Pass |
+| UT_40 | User Registration & Login | Test password recovery request and reset (FR01, SR09) | A single-use reset link is issued and allows setting a new password, invalidating older sessions | Password reset link requested and email sent to outbox; token reset password successfully and old password rejected. | Pass |
+| UT_41 | User Registration & Login | Test account lockout after 5 consecutive failed logins (SR09) | 5 wrong passwords lock the account for 15 minutes, rejecting further attempts with 429 | 5 consecutive wrong passwords locked account for 15 minutes; 6th attempt rejected with 429 ACCOUNT_LOCKED even with correct password. | Pass |
+| UT_42 | User Registration & Login | Stop login response time revealing which emails are registered (SR09, #72) | Login response duration for existing and non-existing emails is indistinguishable | Registered and unregistered accounts return identical 401 error message ("Invalid email or password") with balanced hash comparison times. | Pass |
+| UT_43 | Two-Factor Authentication | Test two-factor authentication setup with QR code (SR03, #104) | A TOTP secret and QR code URI are generated for authenticator app enrollment | 2FA setup generated base32 TOTP secret, otpauth URI, and QR code data URL. | Pass |
+| UT_44 | Two-Factor Authentication | Test two-factor login verification and backup codes (SR03, #105, #106) | Login requires 2FA code; single-use backup codes grant access and cannot be reused | 2FA enrolled with 10 single-use backup codes; login required 2FA verification and backup code completed authentication. | Pass |
+| UT_45 | Admin Role & Access | Check requireAdmin enforcement on admin endpoints (SR01, #110, #111) | Non-admin users receive 403 on all /api/admin routes; admins are granted access | Non-admin request rejected with 403 Forbidden; admin user granted 200 OK access to user administration. | Pass |
+| UT_46 | Admin Security Monitor | Test recording and querying security events (SR09, #118) | Failed logins and lockouts are logged and summarized in the security events API | Security events recorded in database and aggregated correctly by the security monitor endpoint. | Pass |
+| UT_47 | Admin Audit Log | Test append-only admin audit log recording (SR10, #123) | Admin actions create immutable audit entries with no personal financial data | Admin action logged to append-only audit trail containing timestamp, admin ID, and sanitized action metadata. | Pass |
+| UT_48 | Admin User Management | Test admin unlocking and logging out users (SR04, #114, #115) | Admin can list users, unlock locked accounts, and invalidate sessions without seeing financial data | Admin successfully unlocked locked user account and cleared all active sessions across devices. | Pass |
+| UT_49 | Natural Language Queries | Test natural language money query engine (FR21, #96, #97) | Question about monthly spending returns accurate total and category breakdown | Query "How much did I spend on Food?" returned accurate parsed answer: "You spent ₹350.00 on Food across 1 transaction in November 2026.". | Pass |
+| UT_50 | Receipt Scanning | Test receipt text parser extracting amount, date and shop (FR22, #83, #86) | Receipt OCR text yields total amount, valid date, merchant name, and matched category | Receipt text parser extracted amount ₹280.00, date 2026-10-28, merchant "STARBUCKS COFFEE", and matched Food category. | Pass |
+| UT_51 | Export Reports | Test exporting a monthly report as PDF | A valid PDF attachment is returned for the selected month. | Not run | Fail |
+| UT_52 | Export Reports | Test rejecting an unsupported report format | The export request is rejected with HTTP 400. | Not run | Fail |
 
 ## Integration tests (IT)
 
@@ -76,9 +89,11 @@ and are not counted as passing.
 | IT_06 | Budget + Alerts | Check the alert when the budget is crossed | An over-budget alert is shown and the remaining budget is displayed as -300 | Over-budget alert: "Budget limit reached or exceeded."; remaining budget −₹300. | Pass |
 | IT_07 | Budget + Notification | Check that only one alert is sent per threshold crossing | No duplicate alerts are sent for the same threshold | Budget crossed, then two more expenses (₹50, ₹80) with alerts checked each time: 1 over-budget notification in total. | Pass |
 | IT_08 | Prediction + Recommendation | Check the recommended budget stays within income (FR13) | A category-wise suggestion is shown and the total does not exceed the income | Suggested Food ₹5,000, Transport ₹4,000; total ₹9,000 ≤ monthly income ₹15,000. | Pass |
-| IT_09 | Recurring + Reminder | Check the reminder before a due date (FR17) | A reminder is shown for the upcoming payment | Payment due in 3 days: reminder created, "Payment of 499.00 is due on 2026-11-05." | Pass |
-| IT_10 | Recurring + Reminder | Check that reminders stop once the payment is marked paid | The reminder no longer appears for that cycle | Payment due 2026-11-03 marked paid; checking reminders again created 0. | Pass |
+| IT_09 | Recurring + Reminder | Check the reminder before a due date (FR17) | A reminder is shown for the upcoming payment | Payment due in 3 days: reminder created, "Payment of 499.00 is due on 2026-11-06." | Pass |
+| IT_10 | Recurring + Reminder | Check that reminders stop once the payment is marked paid | The reminder no longer appears for that cycle | Payment due 2026-11-04 marked paid; checking reminders again created 0. | Pass |
 | IT_11 | Input Validation | Check that unsafe input is rejected (SR05) | The input is rejected or escaped, and nothing is executed when the entry is opened | The note is stored as plain text and returned as JSON. The React UI shows it as text (no raw HTML insertion anywhere), so the script tag is displayed, not run. | Pass |
+| IT_12 | Auth + Security Monitor | Check that failed logins trigger security event and lockout (SR09, #118) | Consecutive failed logins create a lockout and increment security event counts | Not run | Fail |
+| IT_13 | Insights + Isolation | Check that natural language query strictly isolates user data (#97) | User A cannot query or see any totals or transactions belonging to User B | Not run | Fail |
 
 ## System tests (ST)
 
@@ -90,6 +105,7 @@ and are not counted as passing.
 | ST_04 | End to end | Check that the health score reacts to a change in habits (FR18) | The score drops and a short reason for the change is shown | Score 100 (Excellent) → 10 (Needs improvement) after ₹15,000 of extra spending. Reasons: Your expenses equalled or exceeded your income. Spending exceeded your overall budget. | Pass |
 | ST_05 | End to end | Full user journey from registration to export | Every step works in order and the exported figures match what the dashboard showed | Every step worked and the export matched the dashboard. | Pass |
 | ST_06 | End to end | Check that records survive a restart (NFR10) | All entries are still present and the totals are unchanged | 5 expenses (total ₹5,000) saved; the API was killed and restarted; all 5 were still there, the total was unchanged and the user was still logged in. | Pass |
+| ST_07 | End to end | Full journey with password recovery and lockout clearance (UC-01) | Locked account successfully requests reset link, resets password, and logs in with new password | Not run | Fail |
 
 ## Non-functional check: NFR04 calculation accuracy
 
