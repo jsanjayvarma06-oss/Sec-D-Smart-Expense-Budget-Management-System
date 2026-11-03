@@ -477,6 +477,11 @@ async function handleExportCsv() {
           credentials: 'include',
         },
       );
+      if (response.status === 204) {
+        setError('');
+        setMessage('No expenses recorded for this month. Nothing to export.');
+        return;
+      }
 
       if (!response.ok) {
         const result = await response.json().catch(() => ({}));
