@@ -111,7 +111,7 @@ test.beforeEach(async ({ page }) => {
 // RWD_01, RWD_02 and RWD_03:
 // Verify desktop, tablet and mobile layouts.
 for (const viewport of viewports) {
-  test(`${viewport.name}: application loads without horizontal overflow`, async ({ page }) => {
+  test(`${viewport.name}: application loads without horizontal overflow`, async ({ page, browserName }) => {
     await page.setViewportSize({
       width: viewport.width,
       height: viewport.height
@@ -130,6 +130,11 @@ for (const viewport of viewports) {
     );
 
     expect(pageWidth).toBeLessThanOrEqual(viewport.width);
+    // Capture evidence for Issue #166.
+await page.screenshot({
+  path: `artifacts/issue-166/${browserName}-${viewport.name.toLowerCase()}.png`,
+  fullPage: true
+});
   });
 }
 
