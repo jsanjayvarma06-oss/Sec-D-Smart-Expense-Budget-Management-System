@@ -69,24 +69,87 @@ describe('System', () => {
     assert.ok(after.explanation.length > 0);
     return `Score ${before.score} (${before.rating}) → ${after.score} (${after.rating}) after ${money(15000)} of extra spending. Reasons: ${after.explanation.join(' ')}`;
   });
-
   planTest('ST_05', 'Full user journey from registration to export', async () => {
     const email = `st05-${Date.now()}@test.com`;
-    await request(app).post('/api/auth/register').send({ name: 'Journey User', email, password: PASSWORD }).expect(201);
-    const login = await request(app).post('/api/auth/login').send({ email, password: PASSWORD }).expect(200);
-    const user = { cookie: login.headers['set-cookie'][0].split(';')[0] };
-    await api(user).post('/api/income', { amount: 15000, source: 'Salary', received_on: localDay(0) }).expect(201);
-    for (const amount of [500, 1200, 800]) await addExpense(user, { amount, category: 'Food' });
+
+    // 1. Register and log in
+    await request(app)
+      .post('/api/auth/register')
+      .send({ name: 'Journey User', email, password: PASSWORD })
+      .expect(201);
+
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ email, password: PASSWORD })
+      .expect(200);
+
+    const user = {
+      cookie: login.headers['set-cookie'][0].split(';')[0],
+    };
+
+    // 2. Add income
+    await api(user)
+      .post('/api/income', {
+        amount: 15000,
+        source: 'Salary',
+        received_on: localDay(0),
+      })
+      .expect(201);
+
+    // 3. Add three expenses
+    for (const amount of [500, 1200, 800]) {
+      await addExpense(user, { amount, category: 'Food' });
+    }
+
+    // 4. Set budget
     await setBudget(user, { amount: 10000 });
+
+    // 5. Verify dashboard figures
     const overall = await overallRemaining(user);
     const analytics = await monthlyAnalytics(user);
-    assert.equal(overall.remaining_amount, 7500);
-    assert.equal(analytics.total_spent, 2500);
-    const exported = await api(user).get(`/api/reports/export?month=${thisMonth()}&format=csv`);
-    assert.equal(exported.status, 200, `register, login, income, 3 expenses, budget and dashboard all worked (spent ${money(2500)}, remaining ${money(7500)}), but export answered ${exported.status}`);
-    return 'Every step worked and the export matched the dashboard.';
-  }, { gap: 'Every step up to the dashboard works; report export is not built yet (#54, #55), so the journey cannot finish.' });
 
+    assert.equal(Number(overall.remaining_amount), 7500);
+    assert.equal(Number(analytics.total_spent), 2500);
+
+    // 6. Export monthly CSV report
+    const month = thisMonth();
+    const exported = await api(user)
+      .get(`/api/reports/export?month=${month}&format=csv`)
+      .expect(200);
+
+    assert.match(exported.headers['content-type'], /text\/csv/);
+    assert.match(
+      exported.headers['content-disposition'],
+      new RegExp(`expense-report-${month}\\.csv`),
+    );
+
+    // 7. Verify exported CSV contents
+    const csv = exported.text.replace(/^\uFEFF/, '');
+    const rows = csv.trim().split(/\r?\n/);
+
+    assert.equal(rows.length, 4, 'CSV should contain a header and three expenses');
+
+    assert.match(rows[0], /Date/);
+    assert.match(rows[0], /Merchant/);
+    assert.match(rows[0], /Category/);
+    assert.match(rows[0], /Amount/);
+
+    const amounts = rows.slice(1).map((row) => {
+      const amount = row.split(',').at(-1).replace(/^"|"$/g, '');
+      return Number(amount);
+    });
+
+    assert.deepEqual(
+      amounts.sort((a, b) => a - b),
+      [500, 800, 1200],
+    );
+
+    const exportedTotal = amounts.reduce((sum, amount) => sum + amount, 0);
+
+    assert.equal(exportedTotal, Number(analytics.total_spent));
+    assert.equal(exportedTotal, 2500);
+  return `Registration, login, income, expenses, budget, dashboard and CSV export succeeded. Dashboard spending: ${money(2500)}; CSV total: ${money(exportedTotal)}; remaining balance: ${money(7500)}.`;
+  });
   planTest('ST_06', 'Check that records survive a restart (NFR10)', async () => {
     const port = await freePort();
     let server = await startServer(port);
