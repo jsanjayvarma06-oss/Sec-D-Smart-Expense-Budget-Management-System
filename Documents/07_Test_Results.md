@@ -3,7 +3,7 @@
 Smart Expense & Budget Management System. Results for the 50 cases in
 `04_Test_Plan.pdf`, plus the NFR04 calculation check.
 
-**Run:** 2026-11-03, Node.js v24.12.0, PostgreSQL 17, through the real API
+**Run:** 2026-11-04, Node.js v24.12.0, PostgreSQL 17, through the real API
 (`npm run test:plan -w backend`). Each case is an automated test named after its ID in
 `backend/test/plan/`. The Actual Result column is what that test observed in this run.
 
@@ -50,13 +50,13 @@ and are not counted as passing.
 | UT_24 | Savings Goals | Test creating a savings goal (FR14) | The goal is created, appears in the goal list, and shows its progress (25% when ₹2,500 of ₹10,000 is saved) and the remaining amount | Created "Emergency Fund" with target ₹10,000 and saved amount ₹2,500. Progress is 25% and remaining amount is ₹7,500. The goal also appears in the savings-goals list. | Pass |
 | UT_25 | Savings Goals | Test the time-to-goal estimate (FR15) | An estimate in months is shown from the average monthly savings (₹15,000 remaining at ₹6,000 a month shows about 3 months) | Average monthly savings is ₹6,000. With ₹15,000 remaining, the estimated completion time is 3 months. | Pass |
 | UT_26 | Savings Goals | Test the estimate when nothing is being saved | No number is shown, instead a message that the goal cannot be reached at the current rate | The goal has ₹8,000 remaining, but there is no positive savings history. The system correctly displays "Your goal cannot currently be estimated at your existing saving rate." instead of inventing a completion date. | Pass |
-| UT_27 | Recurring Expenses | Test creating a recurring expense (FR16) | The recurring expense is saved and listed with its next due date | Monthly Rent of ₹6,000 saved and listed with next due date 2026-11-03. | Pass |
+| UT_27 | Recurring Expenses | Test creating a recurring expense (FR16) | The recurring expense is saved and listed with its next due date | Monthly Rent of ₹6,000 saved and listed with next due date 2026-11-04. | Pass |
 | UT_28 | Recurring Expenses | Test that a recurring expense is not created twice in one cycle | Exactly one entry is created for the new cycle, not two | First run created 1, a repeat in the same cycle created 0: exactly one entry. | Pass |
 | UT_29 | What-If Simulator | Test simulating an affordable purchase (FR19) | The result shows the budget left after the purchase and marks it as affordable | Remaining after purchase ₹5,500; affordable. | Pass |
 | UT_30 | What-If Simulator | Test simulating a purchase the user cannot afford | The result warns that the purchase goes past the budget and shows the shortfall | Shortfall ₹32,500; not affordable. | Pass |
 | UT_31 | What-If Simulator | Check that a simulation is not saved as a real expense | No new expense appears in the list and the remaining budget is unchanged | Simulation ran (simulated remaining ₹5,500); the expense list still has 1 entry and the real remaining budget stayed ₹7,500. | Pass |
 | UT_32 | Export Reports | Test exporting a report (FR20) | A file downloads with figures matching the dashboard for that month | CSV report downloaded successfully for 2026-11, containing the test expense of ₹600 with its merchant, category and note. | Pass |
-| UT_33 | Export Reports | Test exporting a month with no data | The app shows a message that there is nothing to export instead of an empty file | An empty-month CSV was returned successfully with column headings and no expense rows. | Pass |
+| UT_33 | Export Reports | Test exporting a month with no data | The app shows a message that there is nothing to export instead of an empty file | The export returned HTTP 204 with no file because the selected month has no expenses. | Pass |
 | UT_34 | Savings Goals | Test updating an existing savings goal | The goal name and saved amount are updated, and progress and remaining amount are recalculated | Updated the goal name and saved amount. New progress is 50% with ₹5,000 remaining. | Pass |
 | UT_35 | Savings Goals | Test deleting an existing savings goal | The goal is deleted and no longer appears in the goal list | Savings goal deleted successfully and no longer appears in the goal list. | Pass |
 | UT_36 | Savings Goals | Test that users cannot modify another user savings goal | Another user cannot update or delete the goal; the owner still has access to it | Another user could neither update nor delete the goal. The original owner still has access to it. | Pass |
@@ -89,8 +89,8 @@ and are not counted as passing.
 | IT_06 | Budget + Alerts | Check the alert when the budget is crossed | An over-budget alert is shown and the remaining budget is displayed as -300 | Over-budget alert: "Budget limit reached or exceeded."; remaining budget −₹300. | Pass |
 | IT_07 | Budget + Notification | Check that only one alert is sent per threshold crossing | No duplicate alerts are sent for the same threshold | Budget crossed, then two more expenses (₹50, ₹80) with alerts checked each time: 1 over-budget notification in total. | Pass |
 | IT_08 | Prediction + Recommendation | Check the recommended budget stays within income (FR13) | A category-wise suggestion is shown and the total does not exceed the income | Suggested Food ₹5,000, Transport ₹4,000; total ₹9,000 ≤ monthly income ₹15,000. | Pass |
-| IT_09 | Recurring + Reminder | Check the reminder before a due date (FR17) | A reminder is shown for the upcoming payment | Payment due in 3 days: reminder created, "Payment of 499.00 is due on 2026-11-06." | Pass |
-| IT_10 | Recurring + Reminder | Check that reminders stop once the payment is marked paid | The reminder no longer appears for that cycle | Payment due 2026-11-04 marked paid; checking reminders again created 0. | Pass |
+| IT_09 | Recurring + Reminder | Check the reminder before a due date (FR17) | A reminder is shown for the upcoming payment | Payment due in 3 days: reminder created, "Payment of 499.00 is due on 2026-11-07." | Pass |
+| IT_10 | Recurring + Reminder | Check that reminders stop once the payment is marked paid | The reminder no longer appears for that cycle | Payment due 2026-11-05 marked paid; checking reminders again created 0. | Pass |
 | IT_11 | Input Validation | Check that unsafe input is rejected (SR05) | The input is rejected or escaped, and nothing is executed when the entry is opened | The note is stored as plain text and returned as JSON. The React UI shows it as text (no raw HTML insertion anywhere), so the script tag is displayed, not run. | Pass |
 | IT_12 | Auth + Security Monitor | Check that failed logins trigger security event and lockout (SR09, #118) | Consecutive failed logins create a lockout and increment security event counts | Not run | Fail |
 | IT_13 | Insights + Isolation | Check that natural language query strictly isolates user data (#97) | User A cannot query or see any totals or transactions belonging to User B | Not run | Fail |
