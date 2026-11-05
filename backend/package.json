@@ -10,6 +10,7 @@
     "migrate": "node --env-file-if-exists=.env src/db/migrate.js",
     "lint": "eslint .",
     "test": "node --env-file-if-exists=.env.test --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "test:coverage": "node --env-file-if-exists=.env.test --experimental-test-coverage --test --test-concurrency=1 test/plan/unit.test.js test/plan/integration.test.js test/plan/system.test.js test/plan/nfr04.test.js",
     "db:backup": "node --env-file-if-exists=.env scripts/backup.js",
     "db:restore": "node --env-file-if-exists=.env scripts/restore.js",
     "db:crash-drill": "node --env-file-if-exists=.env scripts/forcedShutdownDrill.js",
