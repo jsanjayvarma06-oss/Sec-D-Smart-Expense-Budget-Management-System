@@ -12,6 +12,7 @@
     "migrate": "npm run migrate --workspace backend",
     "lint": "npm run lint --workspaces",
     "test": "npm test --workspaces",
+    "test:coverage": "npm run test:coverage --workspaces",
     "build": "npm run build --workspace frontend",
     "db:backup": "npm run db:backup --workspace backend"
   },
