@@ -346,4 +346,37 @@ describe('Two-factor login & backup codes (#105, #106)', () => {
     assert.equal(regenRes.body.backup_codes.length, 10);
     assert.notDeepEqual(regenRes.body.backup_codes, oldCodes);
   });
+
+  test('rejects backup-code regeneration with an invalid current code', async () => {
+    const user = await createUser('regen_invalid_codes@test.com');
+    const cookie = await loginAs(user);
+
+    await request(app)
+      .post('/api/auth/two-factor/setup')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    const secret = await pendingSecret(user.id);
+    const setupCode = totpAt(secret, currentStep());
+
+    await request(app)
+      .post('/api/auth/two-factor/confirm')
+      .set('Cookie', cookie)
+      .send({ code: setupCode })
+      .expect(200);
+
+    // Find a six-digit code that is definitely invalid.
+    let invalidCode = '000000';
+
+    while (verifyTotp(secret, invalidCode)) {
+      invalidCode = String((Number(invalidCode) + 1) % 1000000)
+        .padStart(6, '0');
+    }
+
+    await request(app)
+      .post('/api/auth/two-factor/backup-codes/regenerate')
+      .set('Cookie', cookie)
+      .send({ code: invalidCode })
+      .expect(400);
+  });
 });

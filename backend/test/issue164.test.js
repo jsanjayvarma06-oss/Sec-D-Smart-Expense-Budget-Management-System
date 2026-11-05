@@ -346,6 +346,86 @@ describe('Issue #164: CSV and PDF exports', () => {
     assert.ok(response.body.length > 500);
   });
 
+  test('exports a PDF when there are no expense records', async () => {
+    const { cookie } = await setupUser(
+      'empty_pdf164@test.com',
+    );
+
+    const response = await request(app)
+      .get(
+        `/api/reports/export?month=${month}&format=pdf`,
+      )
+      .set('Cookie', cookie)
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks = [];
+
+        res.on('data', (chunk) => chunks.push(chunk));
+
+        res.on('end', () => {
+          callback(null, Buffer.concat(chunks));
+        });
+      })
+      .expect(200);
+
+    assert.match(
+      response.headers['content-type'],
+      /application\/pdf/,
+    );
+
+    assert.equal(
+      response.body.subarray(0, 5).toString(),
+      '%PDF-',
+    );
+
+    assert.ok(response.body.length > 500);
+  });
+
+  test('adds a new PDF page when expense rows exceed the page space', async () => {
+    const { cookie, food } = await setupUser(
+      'pdf_pagination164@test.com',
+    );
+
+    for (let i = 0; i < 40; i += 1) {
+      await addExpense(cookie, food, {
+        amount: 100 + i,
+        merchant: `PDF Pagination Shop ${i}`,
+        note: `Pagination expense ${i}`,
+      });
+    }
+
+    const response = await request(app)
+      .get(
+        `/api/reports/export?month=${month}&format=pdf`,
+      )
+      .set('Cookie', cookie)
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks = [];
+
+        res.on('data', (chunk) => chunks.push(chunk));
+
+        res.on('end', () => {
+          callback(null, Buffer.concat(chunks));
+        });
+      })
+      .expect(200);
+
+    assert.equal(
+      response.body.subarray(0, 5).toString(),
+      '%PDF-',
+    );
+
+    const pageCount = (
+      response.body.toString('latin1').match(/\/Type\s*\/Page\b/g) || []
+    ).length;
+
+    assert.ok(
+      pageCount > 1,
+      `Expected multiple PDF pages, received ${pageCount}`,
+    );
+  });
+
   test('rejects an unsupported report format', async () => {
     const { cookie } = await setupUser(
       'invalid164@test.com',
