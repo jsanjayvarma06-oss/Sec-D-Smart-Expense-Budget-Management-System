@@ -42,7 +42,7 @@ export async function requireAuth(req, res, next) {
 
     if (!user) {
       if (token) clearSessionCookie(res);
-      logger.warn('Unauthorized request', {
+      logger.info('Unauthorized request', {
         method: req.method,
         path: req.originalUrl,
         ip: req.ip,
