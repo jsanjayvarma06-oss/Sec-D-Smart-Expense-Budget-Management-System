@@ -31,30 +31,7 @@ ALTER TABLE notifications
         'announcement'
     ));
 
--- 3. Create a dedicated restricted broadcast role.
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_roles
-        WHERE rolname = 'announcement_broadcaster'
-    ) THEN
-        CREATE ROLE announcement_broadcaster NOLOGIN;
-    END IF;
-END
-$$;
-
--- This role bypasses RLS, but receives access only to the
--- specific columns and table operations required below.
-ALTER ROLE announcement_broadcaster BYPASSRLS;
-
-GRANT USAGE ON SCHEMA public TO announcement_broadcaster;
-GRANT SELECT (id, disabled_at) ON users TO announcement_broadcaster;
-GRANT INSERT ON notifications TO announcement_broadcaster;
-
--- Temporarily allow this role to own a function in public.
-GRANT CREATE ON SCHEMA public TO announcement_broadcaster;
-
--- 4. Create a restricted broadcast function.
+-- 3. Create a broadcast function.
 CREATE OR REPLACE FUNCTION public.broadcast_announcement(
     p_message VARCHAR(255)
 )
@@ -90,16 +67,35 @@ BEGIN
 END;
 $$;
 
--- Transfer ownership to the restricted role.
-ALTER FUNCTION public.broadcast_announcement(VARCHAR)
-    OWNER TO announcement_broadcaster;
-
--- Remove unnecessary schema creation permission.
-REVOKE CREATE ON SCHEMA public FROM announcement_broadcaster;
-
 -- Only the migration/application database role can invoke it.
 REVOKE ALL ON FUNCTION public.broadcast_announcement(VARCHAR)
     FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.broadcast_announcement(VARCHAR)
     TO CURRENT_USER;
+
+-- Optional: If permissions permit (e.g. on unmanaged superuser instances), configure dedicated restricted role.
+-- On managed cloud databases (Neon, RDS, Supabase), tenant users cannot grant BYPASSRLS or transfer function ownership.
+DO $$
+BEGIN
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_roles
+            WHERE rolname = 'announcement_broadcaster'
+        ) THEN
+            CREATE ROLE announcement_broadcaster NOLOGIN;
+        END IF;
+
+        EXECUTE format('GRANT announcement_broadcaster TO %I', current_user);
+        EXECUTE 'ALTER ROLE announcement_broadcaster BYPASSRLS';
+        EXECUTE 'GRANT USAGE ON SCHEMA public TO announcement_broadcaster';
+        EXECUTE 'GRANT SELECT (id, disabled_at) ON users TO announcement_broadcaster';
+        EXECUTE 'GRANT INSERT ON notifications TO announcement_broadcaster';
+        EXECUTE 'GRANT CREATE ON SCHEMA public TO announcement_broadcaster';
+        EXECUTE 'ALTER FUNCTION public.broadcast_announcement(VARCHAR) OWNER TO announcement_broadcaster';
+        EXECUTE 'REVOKE CREATE ON SCHEMA public FROM announcement_broadcaster';
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Skipping announcement_broadcaster role configuration on cloud environment: %', SQLERRM;
+    END;
+END
+$$;
