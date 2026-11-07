@@ -140,8 +140,10 @@ describe('Integration', () => {
 
   planTest('IT_10', 'Check that reminders stop once the payment is marked paid', async () => {
     const user = await newUser();
-    const recurring = await recurringDue(user, 1);
-    await api(user).post('/api/recurring-expenses/generate-due', { today: localDay(1) }).expect(200);
+    // Due today, so the date sent as "today" is never more than a day from the server's UTC date
+    // (the server refuses anything further away, which tomorrow's date was, in IST after midnight).
+    const recurring = await recurringDue(user, 0);
+    await api(user).post('/api/recurring-expenses/generate-due', { today: localDay(0) }).expect(200);
     await api(user).patch(`/api/recurring-expenses/${recurring.id}/pay`, { due_date: recurring.next_due_date }).expect(200);
     const res = await api(user).post('/api/notifications/payment-reminders', { today: localDay(0) }).expect(200);
     assert.equal(res.body.created_count, 0);
