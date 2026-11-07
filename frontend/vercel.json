@@ -3,6 +3,10 @@
     {
       "source": "/api/:path*",
       "destination": "https://smart-expense-api-ce5b.onrender.com/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
