@@ -1308,7 +1308,9 @@ useEffect(() => {
     <main className="dashboard">
       <header className="dashboard-header">
         <div>
-          <p className="eyebrow">PERSONAL FINANCE</p>
+          <p className="eyebrow">
+            <span className="brand-dot" aria-hidden="true"></span> PERSONAL FINANCE
+          </p>
           <h1>Smart Expense &amp; Budget</h1>
           <p className="muted">Welcome, {user.name}.</p>
         </div>
@@ -1340,6 +1342,21 @@ useEffect(() => {
           </button>
         </div>
       </header>
+
+      <nav className="dashboard-subnav" aria-label="Dashboard sections">
+        <a href="#overview" className="subnav-pill">
+          <span aria-hidden="true">📊</span> Overview
+        </a>
+        <a href="#expenses" className="subnav-pill">
+          <span aria-hidden="true">💸</span> Expenses
+        </a>
+        <a href="#budgets" className="subnav-pill">
+          <span aria-hidden="true">🎯</span> Budgets &amp; Goals
+        </a>
+        <a href="#insights" className="subnav-pill">
+          <span aria-hidden="true">💡</span> AI &amp; Insights
+        </a>
+      </nav>
 
       <section className="connection-panel">
         <span>
@@ -1759,7 +1776,9 @@ useEffect(() => {
         )}
       </section>
 
-      <WhatIfSimulator apiRequest={apiRequest} month={month} categories={categories} />
+      <div id="insights">
+        <WhatIfSimulator apiRequest={apiRequest} month={month} categories={categories} />
+      </div>
 
       <AskMoney apiRequest={apiRequest} />
 
@@ -1810,7 +1829,7 @@ useEffect(() => {
         )}
       </section>
 
-      <section className="summary-grid" aria-label="Budget summary">
+      <section id="overview" className="summary-grid" aria-label="Budget summary">
         <article className="summary-card">
           <p>Total monthly budget</p>
           <h2>
@@ -1844,7 +1863,7 @@ useEffect(() => {
 />
 
 
-      <section className="expense-section">
+      <section id="budgets" className="expense-section">
         <h2>
           {overallBudget ? 'Update monthly budget' : 'Set monthly budget'}
         </h2>
@@ -2073,7 +2092,7 @@ useEffect(() => {
         )}
       </section>
 
-      <section className="expense-section">
+      <section id="expenses" className="expense-section">
         <h2>{editingId ? 'Edit expense' : 'Add an expense'}</h2>
         <p className="muted">
           Record your spending. Your remaining budget refreshes after saving.
@@ -2414,12 +2433,14 @@ useEffect(() => {
                 </td>
 
                 <td>
-                  {expense.category_name ||
-                    categories.find(
-                      (category) =>
-                        category.id === expense.category_id
-                    )?.name ||
-                    'Category'}
+                  <span className="category-badge">
+                    {expense.category_name ||
+                      categories.find(
+                        (category) =>
+                          category.id === expense.category_id
+                      )?.name ||
+                      'Category'}
+                  </span>
                 </td>
 
                 <td className="expense-amount">
